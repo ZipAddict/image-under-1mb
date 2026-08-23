@@ -5,156 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Make Image Ready to Post</title>
   <style>
-    :root { --bg:#f4f7fb; --card:#fff; --text:#172033; --muted:#5c6a7e; --blue:#1769e0; --blue2:#1058c4; --green:#14733b; --red:#b3261e; --border:#d8e0eb; }
-    * { box-sizing:border-box; }
-    body { align-items:center; background:var(--bg); color:var(--text); display:flex; font-family:Arial,Helvetica,sans-serif; justify-content:center; margin:0; min-height:100vh; padding:20px; }
-    main { background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 12px 34px rgba(30,50,80,.12); max-width:470px; padding:28px 24px; text-align:center; width:100%; }
-    h1 { font-size:1.55rem; margin:0 0 10px; }
-    p { color:var(--muted); line-height:1.45; margin:0; }
-    #file-input { display:none; }
-    #choose-button { align-items:center; background:var(--blue); border-radius:9px; color:#fff; cursor:pointer; display:flex; font-size:1rem; font-weight:700; justify-content:center; margin-top:24px; min-height:52px; padding:12px 16px; width:100%; }
-    #choose-button:hover:not(.disabled) { background:var(--blue2); }
-    #choose-button.disabled { cursor:wait; opacity:.65; pointer-events:none; }
-    #status { display:none; font-weight:600; margin-top:22px; }
-    #status.success { color:var(--green); }
-    #status.error { color:var(--red); }
-    #return-button { align-items:center; background:var(--blue); border-radius:9px; color:#fff; display:none; font-weight:700; justify-content:center; margin-top:18px; min-height:52px; padding:12px 16px; text-decoration:none; width:100%; }
-    .privacy { color:var(--muted); font-size:.82rem; margin-top:22px; }
+    :root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#5c6a7e;--blue:#1769e0;--blue2:#1058c4;--green:#14733b;--red:#b3261e;--border:#d8e0eb}
+    *{box-sizing:border-box}body{align-items:center;background:var(--bg);color:var(--text);display:flex;font-family:Arial,Helvetica,sans-serif;justify-content:center;margin:0;min-height:100vh;padding:20px}
+    main{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 34px rgba(30,50,80,.12);max-width:470px;padding:28px 24px;text-align:center;width:100%}
+    h1{font-size:1.55rem;margin:0 0 10px}p{color:var(--muted);line-height:1.45;margin:0}#file-input{display:none}
+    #choose-button{align-items:center;background:var(--blue);border-radius:9px;color:#fff;cursor:pointer;display:flex;font-size:1rem;font-weight:700;justify-content:center;margin-top:24px;min-height:52px;padding:12px 16px;width:100%}
+    #choose-button:hover:not(.disabled){background:var(--blue2)}.disabled{cursor:wait!important;opacity:.65;pointer-events:none}#status{display:none;font-weight:600;margin-top:22px}#status.success{color:var(--green)}#status.error{color:var(--red)}.privacy{font-size:.82rem;margin-top:22px}
   </style>
 </head>
 <body>
-  <main>
-    <h1>Make Image Ready to Post</h1>
-    <p>Choose an image. It will automatically be made smaller than 1 MB.</p>
-    <input id="file-input" type="file" accept="image/*">
-    <label id="choose-button" for="file-input">Choose image</label>
-    <p id="status" role="status"></p>
-    <a id="return-button" href="#">Return to forum</a>
-    <p class="privacy">Your image stays on your device. It is never uploaded to this website.</p>
-  </main>
-  <script>
-    const TARGET_BYTES = 950 * 1024;
-    const MAX_DIMENSION = 1920;
-    const STARTING_QUALITY = 0.92;
-    const MINIMUM_QUALITY = 0.45;
-    const QUALITY_STEP = 0.05;
-    const RESIZE_MULTIPLIER = 0.85;
-    const MINIMUM_DIMENSION = 320;
-    const RETURN_DELAY_MS = 2200;
+<main>
+  <h1>Make Image Ready to Post</h1>
+  <p>Choose an image. It will automatically be made smaller than 1 MB.</p>
+  <input id="file-input" type="file" accept="image/*">
+  <label id="choose-button" for="file-input">Choose image</label>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p class="privacy">Your image stays on your device. It is never uploaded to this website.</p>
+</main>
+<script>
+'use strict';
+const TARGET_BYTES=950*1024,MAX_DIMENSION=1920,STARTING_QUALITY=.92,MINIMUM_QUALITY=.45,QUALITY_STEP=.05,RESIZE_MULTIPLIER=.85,MINIMUM_DIMENSION=320,RETURN_DELAY_MS=2200;
+const fileInput=document.getElementById('file-input'),chooseButton=document.getElementById('choose-button'),status=document.getElementById('status');
+let returnAttempted=false;
 
-    const fileInput = document.getElementById('file-input');
-    const chooseButton = document.getElementById('choose-button');
-    const status = document.getElementById('status');
-    const returnButton = document.getElementById('return-button');
-    const referrerUrl = getSafeReferrerUrl();
+fileInput.addEventListener('change',async()=>{
+  const file=fileInput.files[0]; if(!file)return;
+  if(!file.type.startsWith('image/')){showStatus('Please choose an image file.','error');fileInput.value='';return;}
+  chooseButton.classList.add('disabled'); showStatus('Preparing and downloading your image...','');
+  try{const blob=await compressImage(file);downloadBlob(blob,filenameWithoutExtension(file.name)+'-ready-to-post.jpg');showStatus('Your image is downloading. Returning to the previous forum page...','success');window.setTimeout(returnToPreviousPage,RETURN_DELAY_MS)}
+  catch(error){showStatus(error.message||'The image could not be prepared. Please try another image.','error');chooseButton.classList.remove('disabled')}
+  finally{fileInput.value=''}
+});
 
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        showStatus('Please choose an image file.', 'error');
-        fileInput.value = '';
-        return;
-      }
-      chooseButton.classList.add('disabled');
-      returnButton.style.display = 'none';
-      showStatus('Making your image ready...', '');
-      try {
-        const blob = await compressImage(file);
-        const filename = filenameWithoutExtension(file.name) + '-ready-to-post.jpg';
-        downloadBlob(blob, filename);
-        showStatus('Your image is ready and downloading. Returning you to the forum...', 'success');
-        window.setTimeout(returnToForum, RETURN_DELAY_MS);
-      } catch (error) {
-        showStatus(error.message || 'The image could not be prepared. Please try another image.', 'error');
-        chooseButton.classList.remove('disabled');
-      } finally {
-        fileInput.value = '';
-      }
-    });
-
-    function getSafeReferrerUrl() {
-      if (!document.referrer) return null;
-      try {
-        const url = new URL(document.referrer);
-        return (url.protocol === 'https:' || url.protocol === 'http:') ? url.href : null;
-      } catch (_) { return null; }
-    }
-
-    async function compressImage(file) {
-      const image = await loadImage(file);
-      let width = image.naturalWidth;
-      let height = image.naturalHeight;
-      if (!width || !height) throw new Error('This image has no usable dimensions. Please try another image.');
-      const longest = Math.max(width, height);
-      if (longest > MAX_DIMENSION) {
-        const scale = MAX_DIMENSION / longest;
-        width = Math.max(1, Math.round(width * scale));
-        height = Math.max(1, Math.round(height * scale));
-      }
-      while (width >= MINIMUM_DIMENSION && height >= MINIMUM_DIMENSION) {
-        for (let quality = STARTING_QUALITY; quality >= MINIMUM_QUALITY - 0.0001; quality -= QUALITY_STEP) {
-          const blob = await createJpeg(image, width, height, quality);
-          if (blob.size <= TARGET_BYTES) return blob;
-        }
-        width = Math.round(width * RESIZE_MULTIPLIER);
-        height = Math.round(height * RESIZE_MULTIPLIER);
-      }
-      throw new Error('This image could not be made smaller than 1 MB while keeping a usable size. Please try a smaller image.');
-    }
-
-    function loadImage(file) {
-      return new Promise((resolve, reject) => {
-        const url = URL.createObjectURL(file);
-        const image = new Image();
-        image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
-        image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This image could not be opened by your browser. Please try another image.')); };
-        image.src = url;
-      });
-    }
-
-    function createJpeg(image, width, height, quality) {
-      return new Promise((resolve, reject) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('Your browser could not prepare this image.')); return; }
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(image, 0, 0, width, height);
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Your browser could not create the image file.')), 'image/jpeg', quality);
-      });
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-    }
-
-    function returnToForum() {
-      if (window.history.length > 1) { window.history.back(); return; }
-      if (referrerUrl) { window.location.replace(referrerUrl); return; }
-      showStatus('Your image was downloaded. Return to the forum and upload the saved image.', 'success');
-      chooseButton.classList.remove('disabled');
-    }
-
-    function showStatus(message, type) {
-      status.textContent = message;
-      status.className = type;
-      status.style.display = 'block';
-    }
-
-    function filenameWithoutExtension(name) {
-      const index = name.lastIndexOf('.');
-      return index > 0 ? name.slice(0, index) : name;
-    }
-  </script>
+async function compressImage(file){
+  const image=await loadImage(file); let width=image.naturalWidth,height=image.naturalHeight;
+  if(!width||!height)throw new Error('This image has no usable dimensions. Please try another image.');
+  const longest=Math.max(width,height); if(longest>MAX_DIMENSION){const scale=MAX_DIMENSION/longest;width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale))}
+  while(width>=MINIMUM_DIMENSION&&height>=MINIMUM_DIMENSION){for(let quality=STARTING_QUALITY;quality>=MINIMUM_QUALITY-.0001;quality-=QUALITY_STEP){const blob=await createJpeg(image,width,height,quality);if(blob.size<=TARGET_BYTES)return blob}width=Math.round(width*RESIZE_MULTIPLIER);height=Math.round(height*RESIZE_MULTIPLIER)}
+  throw new Error('This image could not be made smaller than 1 MB while keeping a usable size.');
+}
+function loadImage(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('This image could not be opened by your browser. Please try another image.'))};image.src=url})}
+function createJpeg(image,width,height,quality){return new Promise((resolve,reject)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx){reject(new Error('Your browser could not prepare this image.'));return}ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Your browser could not create the image file.')),'image/jpeg',quality)})}
+function downloadBlob(blob,filename){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.style.display='none';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),30000)}
+function returnToPreviousPage(){if(returnAttempted)return;returnAttempted=true;
+  // New-tab case: the forum tab is the opener and already remains on its exact page.
+  if(window.opener&&!window.opener.closed){try{window.opener.focus()}catch(_){}try{window.close()}catch(_){}window.setTimeout(showManualReturn,900);return}
+  // Same-tab case: use history only when this page was actually linked from another page.
+  if(document.referrer&&window.history.length>1){window.history.back();window.setTimeout(showManualReturn,1500);return}
+  // No trustworthy navigation target exists. Do not send the user to an arbitrary page.
+  showManualReturn();
+}
+function showManualReturn(){showStatus('Your image was downloaded. Return to the forum tab and upload the saved image.','success');chooseButton.classList.remove('disabled')}
+function showStatus(message,type){status.textContent=message;status.className=type;status.style.display='block'}
+function filenameWithoutExtension(name){const i=name.lastIndexOf('.');return i>0?name.slice(0,i):name}
+</script>
 </body>
 </html>
