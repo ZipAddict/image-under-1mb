@@ -20,7 +20,7 @@
   #another-button:hover{background:#39406b}
   #another-button,#download-button{display:none}
   #stage{display:none;margin-top:22px;position:relative}
-  #preview{border-radius:14px;display:block;max-width:100%;width:100%}
+  #preview{aspect-ratio:1/1;border-radius:14px;display:block;max-width:100%;object-fit:cover;width:100%}
   #spinner{align-items:center;background:rgba(10,12,24,.72);border-radius:14px;bottom:0;display:none;flex-direction:column;gap:12px;justify-content:center;left:0;position:absolute;right:0;top:0}
   .ring{animation:spin 1s linear infinite;border:5px solid rgba(255,255,255,.18);border-radius:50%;border-top-color:var(--blue);height:44px;width:44px}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -35,7 +35,7 @@
 <body>
 <main>
   <h1>AI Username Image Generator</h1>
-  <p>Enter a username. A real AI-generated illustration is created just for it, with your name added as a clean caption.</p>
+  <p>Enter a username. A real AI-generated square illustration is created just for it, sized to stay under 1 MB.</p>
 
   <input id="username-input" type="text" maxlength="40" autocomplete="username" placeholder="Enter your username">
 
@@ -52,12 +52,15 @@
   <a id="download-button" class="btn" href="#" download>Download image</a>
 
   <p class="note">
-    Your username is used to build an art prompt sent to the free Pollinations.ai
-    image service to render the picture. No account, sign-up, or payment is used.
-    Final text and framing are added in your browser and are never sent anywhere.
+    Your username selects an art prompt sent to the free Pollinations.ai image
+    service to render the picture. No account, sign-up, or payment is used.
+    Watermark removal is requested automatically and usually succeeds, but
+    Pollinations does not guarantee a watermark-free result for anonymous,
+    key-free requests &mdash; only for their free registered accounts.
+    The final image is compressed in your browser to stay under 1 MB.
   </p>
 
-  <canvas id="composite-canvas" width="1024" height="1200"></canvas>
+  <canvas id="composite-canvas" width="1024" height="1024"></canvas>
 </main>
 
 <script>
@@ -65,10 +68,13 @@
 
 const API_BASE = 'https://image.pollinations.ai/prompt/';
 const IMAGE_SIZE = 1024;
-const CANVAS_WIDTH = 1024;
-const CANVAS_HEIGHT = 1200;
+const CANVAS_SIZE = 1024;
 const MIN_SECONDS_BETWEEN_REQUESTS = 16;
 const REQUEST_TIMEOUT_MS = 55000;
+const TARGET_BYTES = 950 * 1024;
+const STARTING_QUALITY = 0.92;
+const MINIMUM_QUALITY = 0.5;
+const QUALITY_STEP = 0.05;
 
 const usernameInput = document.getElementById('username-input');
 const createButton = document.getElementById('create-button');
@@ -202,11 +208,21 @@ async function generateImage(nextVariation) {
 
     const imageBitmap = await fetchImageWithTimeout(imageUrl, REQUEST_TIMEOUT_MS);
 
-    drawComposite(imageBitmap, username);
+    drawSquareArt(imageBitmap);
 
-    await exportCanvas(username);
+    const blob = await exportUnder1MB();
 
-    showStatus('Your image is ready.', 'success');
+    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = URL.createObjectURL(blob);
+    preview.src = currentObjectUrl;
+    preview.style.visibility = 'visible';
+    downloadButton.href = currentObjectUrl;
+    downloadButton.download = safeFilename(username) + '-ai-username-image.jpg';
+    downloadButton.style.display = 'flex';
+    anotherButton.style.display = 'flex';
+
+    const sizeKb = Math.round(blob.size / 1024);
+    showStatus(`Your image is ready (${sizeKb} KB).`, 'success');
   } catch (error) {
     console.error(error);
     handleGenerationError(error);
@@ -271,70 +287,30 @@ function fetchImageWithTimeout(url, timeoutMs) {
   });
 }
 
-function drawComposite(imageBitmap, username) {
-  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
+function drawSquareArt(imageBitmap) {
+  ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   ctx.fillStyle = '#0b0d18';
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-  const artSize = CANVAS_WIDTH;
-  ctx.drawImage(imageBitmap, 0, 0, artSize, artSize);
-
-  const vignette = ctx.createRadialGradient(
-    CANVAS_WIDTH / 2, artSize / 2, artSize * 0.25,
-    CANVAS_WIDTH / 2, artSize / 2, artSize * 0.72
-  );
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, 'rgba(0,0,0,0.38)');
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, artSize, artSize);
-
-  const plaqueGradient = ctx.createLinearGradient(0, artSize, CANVAS_WIDTH, CANVAS_HEIGHT);
-  plaqueGradient.addColorStop(0, '#11142a');
-  plaqueGradient.addColorStop(1, '#191c38');
-  ctx.fillStyle = plaqueGradient;
-  ctx.fillRect(0, artSize, CANVAS_WIDTH, CANVAS_HEIGHT - artSize);
-
-  ctx.strokeStyle = 'rgba(120,140,255,0.55)';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, CANVAS_WIDTH - 4, CANVAS_HEIGHT - 4);
-
-  const displayedName = username.length > 22 ? username.slice(0, 19) + '...' : username;
-  let fontSize = 58;
-  ctx.font = `700 ${fontSize}px Arial`;
-  while (ctx.measureText(displayedName).width > CANVAS_WIDTH - 100 && fontSize > 28) {
-    fontSize -= 2;
-    ctx.font = `700 ${fontSize}px Arial`;
-  }
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(displayedName, CANVAS_WIDTH / 2, artSize + (CANVAS_HEIGHT - artSize) / 2 - 8);
-
-  ctx.font = '400 22px Arial';
-  ctx.fillStyle = 'rgba(180,190,230,0.85)';
-  ctx.fillText('AI-generated username art', CANVAS_WIDTH / 2, artSize + (CANVAS_HEIGHT - artSize) / 2 + 34);
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  ctx.drawImage(imageBitmap, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 }
 
-function exportCanvas(username) {
+function exportUnder1MB() {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error('Your browser could not export the final image.'));
-        return;
-      }
-      if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-      }
-      currentObjectUrl = URL.createObjectURL(blob);
-      preview.src = currentObjectUrl;
-      preview.style.visibility = 'visible';
-      downloadButton.href = currentObjectUrl;
-      downloadButton.download = safeFilename(username) + '-ai-username-image.png';
-      downloadButton.style.display = 'flex';
-      anotherButton.style.display = 'flex';
-      resolve();
-    }, 'image/png');
+    tryQuality(STARTING_QUALITY);
+
+    function tryQuality(quality) {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Your browser could not export the final image.'));
+          return;
+        }
+        if (blob.size <= TARGET_BYTES || quality <= MINIMUM_QUALITY) {
+          resolve(blob);
+          return;
+        }
+        tryQuality(Math.max(MINIMUM_QUALITY, quality - QUALITY_STEP));
+      }, 'image/jpeg', quality);
+    }
   });
 }
 
