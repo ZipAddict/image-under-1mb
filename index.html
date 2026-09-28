@@ -67,297 +67,291 @@
 </main>
 
 <script>
-'use strict';
+"use strict";
 
-const API_BASE = 'https://image.pollinations.ai/prompt/';
-const IMAGE_SIZE = 1024;
-const CANVAS_SIZE = 1024;
-const MIN_SECONDS_BETWEEN_REQUESTS = 16;
-const REQUEST_TIMEOUT_MS = 55000;
-const TARGET_BYTES = 950 * 1024;
-const STARTING_QUALITY = 0.92;
-const MINIMUM_QUALITY = 0.5;
-const QUALITY_STEP = 0.05;
+var API_BASE = "https://image.pollinations.ai/prompt/";
+var IMAGE_SIZE = 1024;
+var CANVAS_SIZE = 1024;
+var MIN_SECONDS_BETWEEN_REQUESTS = 16;
+var REQUEST_TIMEOUT_MS = 55000;
+var TARGET_BYTES = 950 * 1024;
+var STARTING_QUALITY = 0.92;
+var MINIMUM_QUALITY = 0.5;
+var QUALITY_STEP = 0.05;
 
-const usernameInput = document.getElementById('username-input');
-const createButton = document.getElementById('create-button');
-const anotherButton = document.getElementById('another-button');
-const downloadButton = document.getElementById('download-button');
-const stage = document.getElementById('stage');
-const preview = document.getElementById('preview');
-const spinner = document.getElementById('spinner');
-const spinnerText = document.getElementById('spinner-text');
-const status = document.getElementById('status');
-const promptPreviewEl = document.getElementById('prompt-preview');
-const canvas = document.getElementById('composite-canvas');
-const ctx = canvas.getContext('2d');
+var usernameInput = document.getElementById("username-input");
+var createButton = document.getElementById("create-button");
+var anotherButton = document.getElementById("another-button");
+var downloadButton = document.getElementById("download-button");
+var stage = document.getElementById("stage");
+var preview = document.getElementById("preview");
+var spinner = document.getElementById("spinner");
+var spinnerText = document.getElementById("spinner-text");
+var status = document.getElementById("status");
+var promptPreviewEl = document.getElementById("prompt-preview");
+var canvas = document.getElementById("composite-canvas");
+var ctx = canvas.getContext("2d");
 
-let variation = 0;
-let lastRequestTime = 0;
-let cooldownInterval = null;
-let currentObjectUrl = null;
+var variation = 0;
+var lastRequestTime = 0;
+var cooldownInterval = null;
+var currentObjectUrl = null;
 
-/* ---------- LAYER 1: SUBJECT (main character or object) ---------- */
-const subjectKeywords = {
-  dragon: 'a majestic ancient dragon with glowing scales',
-  knight: 'a knight in ornate battle-worn armor',
-  wizard: 'a mysterious hooded wizard holding a glowing staff',
-  witch: 'a witch with a pointed hat and glowing potion bottles',
-  unicorn: 'a radiant unicorn with a flowing rainbow mane',
-  mermaid: 'a graceful mermaid with shimmering iridescent scales',
-  vampire: 'a elegant vampire in a dark velvet cloak',
-  zombie: 'a stylized zombie wandering through fog',
-  ghost: 'a translucent glowing ghost drifting through darkness',
-  ninja: 'a stealthy ninja leaping between rooftops',
-  samurai: 'a samurai warrior holding a katana, cherry blossoms falling',
-  pirate: 'a rugged pirate captain standing on a ship deck',
-  viking: 'a fierce viking warrior with a battle axe',
-  robot: 'a futuristic chrome robot with glowing circuitry',
-  cyborg: 'a battle-damaged cyborg with glowing red optics',
-  alien: 'a glowing alien creature with luminescent skin',
-  astronaut: 'an astronaut in a reflective visor helmet',
-  griffin: 'a majestic griffin with feathered wings',
-  phoenix: 'a phoenix bursting into brilliant flame',
-  wolf: 'a fierce wolf with piercing amber eyes',
-  fox: 'a sly red fox with a bushy tail',
-  tiger: 'a powerful tiger with vivid orange stripes',
-  lion: 'a regal lion with a flowing golden mane',
-  panther: 'a sleek black panther prowling silently',
-  bear: 'a massive grizzly bear standing on a riverbank',
-  owl: 'a wise owl with piercing golden eyes',
-  eagle: 'a bald eagle soaring with wings spread wide',
-  hawk: 'a fierce hawk diving through the air',
-  falcon: 'a swift falcon in mid flight',
-  shark: 'a great white shark gliding through deep water',
-  whale: 'a massive humpback whale breaching the ocean surface',
-  dolphin: 'a playful dolphin leaping through ocean spray',
-  octopus: 'a glowing bioluminescent octopus in deep water',
-  cat: 'a curious cat with piercing eyes',
-  dog: 'a loyal dog with a joyful expression',
-  husky: 'a husky with striking blue eyes in snow',
-  fish: 'a colorful tropical fish swimming through coral',
-  horse: 'a wild horse galloping through an open field',
-  deer: 'a graceful deer standing in a misty forest',
-  rabbit: 'a small rabbit sitting in tall grass at dawn',
-  panda: 'a panda resting among bamboo leaves',
-  koala: 'a koala resting in a eucalyptus tree',
-  penguin: 'a penguin standing on an icy shore',
-  butterfly: 'a butterfly with intricately patterned wings',
-  spider: 'a detailed spider with glistening dew-covered web',
-  snake: 'a coiled snake with iridescent scales',
-  bee: 'a bee hovering beside a blooming flower',
-  rocket: 'a sleek chrome rocket launching skyward',
-  spaceship: 'a futuristic spaceship gliding through the stars',
-  ufo: 'a glowing alien UFO hovering in the night sky',
-  car: 'a sleek sports car glistening under city lights',
-  motorcycle: 'a vintage motorcycle parked under neon signs',
-  bike: 'a mountain bike resting on a rocky trail',
-  train: 'an old steam train crossing a mountain bridge',
-  plane: 'a vintage airplane flying above scattered clouds',
-  ship: 'a wooden sailing ship cutting through ocean waves',
-  submarine: 'a glowing yellow submarine deep underwater',
-  castle: 'a towering stone castle on a cliffside',
-  temple: 'an ancient overgrown temple hidden in the jungle',
-  pyramid: 'a golden pyramid glowing under a desert sunset',
-  lighthouse: 'a lighthouse standing against crashing waves',
-  windmill: 'an old windmill on a rolling green hillside',
-  treehouse: 'a cozy treehouse nestled in glowing forest branches',
-  crown: 'an ornate jeweled crown resting on velvet',
-  sword: 'a glowing enchanted sword embedded in stone',
-  shield: 'an ornately engraved battle shield',
-  treasure: 'a golden treasure chest overflowing with jewels',
-  compass: 'an antique brass compass resting on an old map',
-  hourglass: 'a glowing hourglass with swirling golden sand',
-  guitar: 'an electric guitar wrapped in colorful stage smoke',
-  piano: 'a grand piano bathed in warm spotlight',
-  camera: 'a vintage film camera resting on worn leather',
-  book: 'an ancient glowing spellbook with floating runes',
-  telescope: 'a brass telescope pointed toward a starry sky',
-  balloon: 'a hot air balloon drifting above rolling hills',
-  kite: 'a colorful kite soaring against a bright sky',
-  flower: 'a giant blooming flower glowing with morning dew',
-  tree: 'an ancient glowing tree with sprawling roots',
-  mountain: 'a jagged snow capped mountain peak',
-  volcano: 'an erupting volcano glowing with molten lava',
-  pizza: 'a steaming slice of pizza with melted cheese',
-  coffee: 'a steaming cup of coffee beside an open book',
-  cake: 'an elaborate multi tier birthday cake with candles',
-  donut: 'a glazed donut with colorful sprinkles',
-  skateboard: 'a skateboard leaning against a graffiti covered wall',
-  surfboard: 'a surfboard standing upright in golden sand',
-  controller: 'a glowing futuristic game controller',
-  dice: 'a pair of glowing dice mid roll',
-  chess: 'an ornate chess king piece on a marble board',
-  planet: 'a glowing crystal planet ringed with stardust',
-  moon: 'a glowing full moon behind wispy clouds',
-  star: 'a brilliant shooting star streaking across the sky',
-  galaxy: 'a swirling spiral galaxy filled with colorful nebulae',
-  comet: 'a blazing comet streaking through deep space',
-  ice: 'a glowing ice crystal formation',
-  fire: 'a swirling vortex of magical flame',
-  lightning: 'a bolt of lightning splitting a stormy sky',
-  rainbow: 'a vivid rainbow arching over rolling hills',
-  crystal: 'a cluster of glowing magical crystals',
-  gem: 'a brilliant cut gemstone catching the light'
+var subjectKeywords = {
+  dragon: "a majestic ancient dragon with glowing scales",
+  knight: "a knight in ornate battle-worn armor",
+  wizard: "a mysterious hooded wizard holding a glowing staff",
+  witch: "a witch with a pointed hat and glowing potion bottles",
+  unicorn: "a radiant unicorn with a flowing rainbow mane",
+  mermaid: "a graceful mermaid with shimmering iridescent scales",
+  vampire: "an elegant vampire in a dark velvet cloak",
+  zombie: "a stylized zombie wandering through fog",
+  ghost: "a translucent glowing ghost drifting through darkness",
+  ninja: "a stealthy ninja leaping between rooftops",
+  samurai: "a samurai warrior holding a katana, cherry blossoms falling",
+  pirate: "a rugged pirate captain standing on a ship deck",
+  viking: "a fierce viking warrior with a battle axe",
+  robot: "a futuristic chrome robot with glowing circuitry",
+  cyborg: "a battle-damaged cyborg with glowing red optics",
+  alien: "a glowing alien creature with luminescent skin",
+  astronaut: "an astronaut in a reflective visor helmet",
+  griffin: "a majestic griffin with feathered wings",
+  phoenix: "a phoenix bursting into brilliant flame",
+  wolf: "a fierce wolf with piercing amber eyes",
+  fox: "a sly red fox with a bushy tail",
+  tiger: "a powerful tiger with vivid orange stripes",
+  lion: "a regal lion with a flowing golden mane",
+  panther: "a sleek black panther prowling silently",
+  bear: "a massive grizzly bear standing on a riverbank",
+  owl: "a wise owl with piercing golden eyes",
+  eagle: "a bald eagle soaring with wings spread wide",
+  hawk: "a fierce hawk diving through the air",
+  falcon: "a swift falcon in mid flight",
+  shark: "a great white shark gliding through deep water",
+  whale: "a massive humpback whale breaching the ocean surface",
+  dolphin: "a playful dolphin leaping through ocean spray",
+  octopus: "a glowing bioluminescent octopus in deep water",
+  cat: "a curious cat with piercing eyes",
+  dog: "a loyal dog with a joyful expression",
+  husky: "a husky with striking blue eyes in snow",
+  fish: "a colorful tropical fish swimming through coral",
+  horse: "a wild horse galloping through an open field",
+  deer: "a graceful deer standing in a misty forest",
+  rabbit: "a small rabbit sitting in tall grass at dawn",
+  panda: "a panda resting among bamboo leaves",
+  koala: "a koala resting in a eucalyptus tree",
+  penguin: "a penguin standing on an icy shore",
+  butterfly: "a butterfly with intricately patterned wings",
+  spider: "a detailed spider with a glistening dew-covered web",
+  snake: "a coiled snake with iridescent scales",
+  bee: "a bee hovering beside a blooming flower",
+  rocket: "a sleek chrome rocket launching skyward",
+  spaceship: "a futuristic spaceship gliding through the stars",
+  ufo: "a glowing alien UFO hovering in the night sky",
+  car: "a sleek sports car glistening under city lights",
+  motorcycle: "a vintage motorcycle parked under neon signs",
+  bike: "a mountain bike resting on a rocky trail",
+  train: "an old steam train crossing a mountain bridge",
+  plane: "a vintage airplane flying above scattered clouds",
+  ship: "a wooden sailing ship cutting through ocean waves",
+  submarine: "a glowing yellow submarine deep underwater",
+  castle: "a towering stone castle on a cliffside",
+  temple: "an ancient overgrown temple hidden in the jungle",
+  pyramid: "a golden pyramid glowing under a desert sunset",
+  lighthouse: "a lighthouse standing against crashing waves",
+  windmill: "an old windmill on a rolling green hillside",
+  treehouse: "a cozy treehouse nestled in glowing forest branches",
+  crown: "an ornate jeweled crown resting on velvet",
+  sword: "a glowing enchanted sword embedded in stone",
+  shield: "an ornately engraved battle shield",
+  treasure: "a golden treasure chest overflowing with jewels",
+  compass: "an antique brass compass resting on an old map",
+  hourglass: "a glowing hourglass with swirling golden sand",
+  guitar: "an electric guitar wrapped in colorful stage smoke",
+  piano: "a grand piano bathed in warm spotlight",
+  camera: "a vintage film camera resting on worn leather",
+  book: "an ancient glowing spellbook with floating runes",
+  telescope: "a brass telescope pointed toward a starry sky",
+  balloon: "a hot air balloon drifting above rolling hills",
+  kite: "a colorful kite soaring against a bright sky",
+  flower: "a giant blooming flower glowing with morning dew",
+  tree: "an ancient glowing tree with sprawling roots",
+  mountain: "a jagged snow capped mountain peak",
+  volcano: "an erupting volcano glowing with molten lava",
+  pizza: "a steaming slice of pizza with melted cheese",
+  coffee: "a steaming cup of coffee beside an open book",
+  cake: "an elaborate multi tier birthday cake with candles",
+  donut: "a glazed donut with colorful sprinkles",
+  skateboard: "a skateboard leaning against a graffiti covered wall",
+  surfboard: "a surfboard standing upright in golden sand",
+  controller: "a glowing futuristic game controller",
+  dice: "a pair of glowing dice mid roll",
+  chess: "an ornate chess king piece on a marble board",
+  planet: "a glowing crystal planet ringed with stardust",
+  moon: "a glowing full moon behind wispy clouds",
+  star: "a brilliant shooting star streaking across the sky",
+  galaxy: "a swirling spiral galaxy filled with colorful nebulae",
+  comet: "a blazing comet streaking through deep space",
+  ice: "a glowing ice crystal formation",
+  fire: "a swirling vortex of magical flame",
+  lightning: "a bolt of lightning splitting a stormy sky",
+  rainbow: "a vivid rainbow arching over rolling hills",
+  crystal: "a cluster of glowing magical crystals",
+  gem: "a brilliant cut gemstone catching the light"
 };
 
-/* ---------- LAYER 2: SETTING (environment / backdrop) ---------- */
-const settingKeywords = {
-  space: 'floating in deep space among distant stars',
-  galaxy: 'set against a swirling galaxy backdrop',
-  ocean: 'surrounded by vast turquoise ocean water',
-  underwater: 'deep underwater surrounded by drifting light rays',
-  forest: 'standing within a dense ancient forest',
-  jungle: 'deep within a lush overgrown jungle',
-  desert: 'standing on windswept desert sand dunes',
-  mountain: 'high on a windswept mountain ridge',
-  arctic: 'surrounded by icy arctic tundra',
-  snow: 'standing in a heavy snowfall',
-  volcano: 'near the glowing edge of an active volcano',
-  cave: 'inside a glowing crystal cave',
-  city: 'within a sprawling glowing city skyline',
-  cyberpunk: 'in a neon soaked cyberpunk cityscape',
-  village: 'within a quiet medieval stone village',
-  ruins: 'among ancient crumbling stone ruins',
-  temple: 'inside an ornate glowing temple',
-  garden: 'within a blooming secret garden',
-  meadow: 'in a wide sunlit meadow of wildflowers',
-  swamp: 'within a misty glowing swamp',
-  canyon: 'within a dramatic sunlit canyon',
-  beach: 'along a quiet windswept shoreline',
-  sky: 'high above the clouds in open sky',
-  library: 'inside a towering candlelit ancient library',
-  workshop: 'inside a cluttered glowing inventor workshop',
-  market: 'within a bustling lantern lit night market',
-  carnival: 'inside a glowing colorful carnival at night'
+var settingKeywords = {
+  space: "floating in deep space among distant stars",
+  galaxy: "set against a swirling galaxy backdrop",
+  ocean: "surrounded by vast turquoise ocean water",
+  underwater: "deep underwater surrounded by drifting light rays",
+  forest: "standing within a dense ancient forest",
+  jungle: "deep within a lush overgrown jungle",
+  desert: "standing on windswept desert sand dunes",
+  mountain: "high on a windswept mountain ridge",
+  arctic: "surrounded by icy arctic tundra",
+  snow: "standing in a heavy snowfall",
+  volcano: "near the glowing edge of an active volcano",
+  cave: "inside a glowing crystal cave",
+  city: "within a sprawling glowing city skyline",
+  cyberpunk: "in a neon soaked cyberpunk cityscape",
+  village: "within a quiet medieval stone village",
+  ruins: "among ancient crumbling stone ruins",
+  temple: "inside an ornate glowing temple",
+  garden: "within a blooming secret garden",
+  meadow: "in a wide sunlit meadow of wildflowers",
+  swamp: "within a misty glowing swamp",
+  canyon: "within a dramatic sunlit canyon",
+  beach: "along a quiet windswept shoreline",
+  sky: "high above the clouds in open sky",
+  library: "inside a towering candlelit ancient library",
+  workshop: "inside a cluttered glowing inventor workshop",
+  market: "within a bustling lantern lit night market",
+  carnival: "inside a glowing colorful carnival at night"
 };
 
-/* ---------- LAYER 3: TIME / LIGHTING ---------- */
-const lightingPool = [
-  'during a vivid golden hour sunset',
-  'under a brilliant sunrise sky',
-  'beneath a starry midnight sky',
-  'illuminated by soft moonlight',
-  'lit by dramatic storm clouds',
-  'glowing under neon city lights',
-  'bathed in warm candlelight',
-  'under swirling aurora borealis light',
-  'wrapped in soft misty morning fog',
-  'lit by a single dramatic spotlight'
+var lightingPool = [
+  "during a vivid golden hour sunset",
+  "under a brilliant sunrise sky",
+  "beneath a starry midnight sky",
+  "illuminated by soft moonlight",
+  "lit by dramatic storm clouds",
+  "glowing under neon city lights",
+  "bathed in warm candlelight",
+  "under swirling aurora borealis light",
+  "wrapped in soft misty morning fog",
+  "lit by a single dramatic spotlight"
 ];
-const lightingKeywords = {
-  night: 'beneath a starry midnight sky',
-  moon: 'illuminated by soft moonlight',
-  sunset: 'during a vivid golden hour sunset',
-  sunrise: 'under a brilliant sunrise sky',
-  storm: 'lit by dramatic storm clouds',
-  neon: 'glowing under neon city lights',
-  dark: 'wrapped in deep atmospheric shadow',
-  bright: 'lit by brilliant clear daylight',
-  dawn: 'under a brilliant sunrise sky',
-  aurora: 'under swirling aurora borealis light'
+var lightingKeywords = {
+  night: "beneath a starry midnight sky",
+  moon: "illuminated by soft moonlight",
+  sunset: "during a vivid golden hour sunset",
+  sunrise: "under a brilliant sunrise sky",
+  storm: "lit by dramatic storm clouds",
+  neon: "glowing under neon city lights",
+  dark: "wrapped in deep atmospheric shadow",
+  bright: "lit by brilliant clear daylight",
+  dawn: "under a brilliant sunrise sky",
+  aurora: "under swirling aurora borealis light"
 };
 
-/* ---------- LAYER 4: ATMOSPHERE EFFECT ---------- */
-const atmospherePool = [
-  'with glowing fireflies drifting through the air',
-  'with gentle falling snow',
-  'with soft drifting fog',
-  'with scattered glowing embers',
-  'with delicate falling autumn leaves',
-  'with drifting cherry blossom petals',
-  'with faint rising steam',
-  'with sparkling floating dust particles',
-  'with light rain falling',
-  'with swirling wisps of magical energy'
+var atmospherePool = [
+  "with glowing fireflies drifting through the air",
+  "with gentle falling snow",
+  "with soft drifting fog",
+  "with scattered glowing embers",
+  "with delicate falling autumn leaves",
+  "with drifting cherry blossom petals",
+  "with faint rising steam",
+  "with sparkling floating dust particles",
+  "with light rain falling",
+  "with swirling wisps of magical energy"
 ];
-const atmosphereKeywords = {
-  snow: 'with gentle falling snow',
-  fire: 'with scattered glowing embers',
-  rain: 'with light rain falling',
-  fog: 'with soft drifting fog',
-  magic: 'with swirling wisps of magical energy',
-  autumn: 'with delicate falling autumn leaves',
-  spring: 'with drifting cherry blossom petals',
-  spark: 'with sparkling floating dust particles'
+var atmosphereKeywords = {
+  snow: "with gentle falling snow",
+  fire: "with scattered glowing embers",
+  rain: "with light rain falling",
+  fog: "with soft drifting fog",
+  magic: "with swirling wisps of magical energy",
+  autumn: "with delicate falling autumn leaves",
+  spring: "with drifting cherry blossom petals",
+  spark: "with sparkling floating dust particles"
 };
 
-/* ---------- LAYER 5: ART STYLE ---------- */
-const stylePool = [
-  'highly detailed digital painting',
-  'epic fantasy concept art',
-  'cinematic hyper realistic render',
-  'soft painterly illustration',
-  'dramatic matte painting',
-  'vibrant anime inspired illustration',
-  'intricate ink and watercolor style',
-  'polished 3D render',
-  'moody oil painting style',
-  'bold comic book illustration style'
+var stylePool = [
+  "highly detailed digital painting",
+  "epic fantasy concept art",
+  "cinematic hyper realistic render",
+  "soft painterly illustration",
+  "dramatic matte painting",
+  "vibrant anime inspired illustration",
+  "intricate ink and watercolor style",
+  "polished 3D render",
+  "moody oil painting style",
+  "bold comic book illustration style"
 ];
-const styleKeywords = {
-  anime: 'vibrant anime inspired illustration',
-  pixel: 'stylized retro pixel art rendering',
-  comic: 'bold comic book illustration style',
-  paint: 'soft painterly illustration',
-  retro: 'nostalgic retro poster art style',
-  '3d': 'polished 3D render',
-  ink: 'intricate ink and watercolor style'
+var styleKeywords = {
+  anime: "vibrant anime inspired illustration",
+  pixel: "stylized retro pixel art rendering",
+  comic: "bold comic book illustration style",
+  paint: "soft painterly illustration",
+  retro: "nostalgic retro poster art style",
+  ink: "intricate ink and watercolor style"
 };
 
-/* ---------- LAYER 6: COLOR PALETTE ---------- */
-const palettePool = [
-  'rendered in vivid jewel tone colors',
-  'rendered in soft dreamy pastel colors',
-  'rendered in warm fiery orange and red tones',
-  'rendered in cool icy blue and teal tones',
-  'rendered in deep moody purple and violet tones',
-  'rendered in rich emerald and gold tones',
-  'rendered in high contrast black and gold tones',
-  'rendered in glowing neon pink and cyan tones'
+var palettePool = [
+  "rendered in vivid jewel tone colors",
+  "rendered in soft dreamy pastel colors",
+  "rendered in warm fiery orange and red tones",
+  "rendered in cool icy blue and teal tones",
+  "rendered in deep moody purple and violet tones",
+  "rendered in rich emerald and gold tones",
+  "rendered in high contrast black and gold tones",
+  "rendered in glowing neon pink and cyan tones"
 ];
-const paletteKeywords = {
-  red: 'rendered in bold fiery red tones',
-  blue: 'rendered in cool icy blue tones',
-  green: 'rendered in rich emerald green tones',
-  purple: 'rendered in deep moody violet tones',
-  gold: 'rendered in luxurious gold and amber tones',
-  silver: 'rendered in cool metallic silver tones',
-  black: 'rendered in high contrast black and gold tones',
-  pink: 'rendered in glowing neon pink tones',
-  orange: 'rendered in warm fiery orange tones',
-  white: 'rendered in soft luminous white and silver tones'
+var paletteKeywords = {
+  red: "rendered in bold fiery red tones",
+  blue: "rendered in cool icy blue tones",
+  green: "rendered in rich emerald green tones",
+  purple: "rendered in deep moody violet tones",
+  gold: "rendered in luxurious gold and amber tones",
+  silver: "rendered in cool metallic silver tones",
+  black: "rendered in high contrast black and gold tones",
+  pink: "rendered in glowing neon pink tones",
+  orange: "rendered in warm fiery orange tones",
+  white: "rendered in soft luminous white and silver tones"
 };
 
-/* ---------- LAYER 7: CAMERA / COMPOSITION ---------- */
-const compositionPool = [
-  'dramatic low angle shot',
-  'sweeping wide establishing shot',
-  'intimate close up composition',
-  'dynamic action pose composition',
-  'symmetrical centered composition',
-  'striking silhouette composition',
-  'bird\\'s eye aerial view composition',
-  'cinematic rule of thirds composition'
+var compositionPool = [
+  "dramatic low angle shot",
+  "sweeping wide establishing shot",
+  "intimate close up composition",
+  "dynamic action pose composition",
+  "symmetrical centered composition",
+  "striking silhouette composition",
+  "bird's eye aerial view composition",
+  "cinematic rule of thirds composition"
 ];
 
-createButton.addEventListener('click', () => generateImage(0));
-anotherButton.addEventListener('click', () => generateImage(variation + 1));
-usernameInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') generateImage(0); });
+createButton.addEventListener("click", function () { generateImage(0); });
+anotherButton.addEventListener("click", function () { generateImage(variation + 1); });
+usernameInput.addEventListener("keydown", function (event) {
+  if (event.key === "Enter") { generateImage(0); }
+});
 
-async function generateImage(nextVariation) {
-  const username = usernameInput.value.trim();
+function generateImage(nextVariation) {
+  var username = usernameInput.value.trim();
 
   if (!username) {
-    showStatus('Please enter a username.', 'error');
+    showStatus("Please enter a username.", "error");
     return;
   }
   if (username.length > 40) {
-    showStatus('Please use 40 characters or fewer.', 'error');
+    showStatus("Please use 40 characters or fewer.", "error");
     return;
   }
 
-  const secondsSinceLast = (Date.now() - lastRequestTime) / 1000;
+  var secondsSinceLast = (Date.now() - lastRequestTime) / 1000;
   if (lastRequestTime && secondsSinceLast < MIN_SECONDS_BETWEEN_REQUESTS) {
     startCooldownCountdown(Math.ceil(MIN_SECONDS_BETWEEN_REQUESTS - secondsSinceLast));
     return;
@@ -368,144 +362,161 @@ async function generateImage(nextVariation) {
 
   setBusy(true);
   hideStatus();
-  stage.style.display = 'block';
-  spinner.style.display = 'flex';
-  spinnerText.textContent = 'Creating your image... this can take up to 30 seconds.';
-  preview.style.visibility = 'hidden';
-  promptPreviewEl.textContent = '';
+  stage.style.display = "block";
+  spinner.style.display = "flex";
+  spinnerText.textContent = "Creating your image... this can take up to 30 seconds.";
+  preview.style.visibility = "hidden";
+  promptPreviewEl.textContent = "";
 
-  try {
-    const prompt = buildLayeredPrompt(username, variation);
-    const seed = Math.floor(seededRandom(hashString(username + '|seed|' + variation))() * 1000000);
-    const imageUrl = buildImageUrl(prompt, seed);
+  var prompt = buildLayeredPrompt(username, variation);
+  var seedRandom = seededRandom(hashString(username + "|seed|" + variation));
+  var seed = Math.floor(seedRandom() * 1000000);
+  var imageUrl = buildImageUrl(prompt, seed);
 
-    const imageBitmap = await fetchImageWithTimeout(imageUrl, REQUEST_TIMEOUT_MS);
+  fetchImageWithTimeout(imageUrl, REQUEST_TIMEOUT_MS)
+    .then(function (imageBitmap) {
+      drawSquareArt(imageBitmap);
+      return exportUnder1MB();
+    })
+    .then(function (blob) {
+      if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); }
+      currentObjectUrl = URL.createObjectURL(blob);
+      preview.src = currentObjectUrl;
+      preview.style.visibility = "visible";
+      downloadButton.href = currentObjectUrl;
+      downloadButton.download = safeFilename(username) + "-ai-username-image.jpg";
+      downloadButton.style.display = "flex";
+      anotherButton.style.display = "flex";
 
-    drawSquareArt(imageBitmap);
-
-    const blob = await exportUnder1MB();
-
-    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-    currentObjectUrl = URL.createObjectURL(blob);
-    preview.src = currentObjectUrl;
-    preview.style.visibility = 'visible';
-    downloadButton.href = currentObjectUrl;
-    downloadButton.download = safeFilename(username) + '-ai-username-image.jpg';
-    downloadButton.style.display = 'flex';
-    anotherButton.style.display = 'flex';
-
-    const sizeKb = Math.round(blob.size / 1024);
-    showStatus(`Your image is ready (${sizeKb} KB).`, 'success');
-    promptPreviewEl.textContent = 'Prompt used: ' + prompt;
-  } catch (error) {
-    console.error(error);
-    handleGenerationError(error);
-  } finally {
-    spinner.style.display = 'none';
-    setBusy(false);
-  }
+      var sizeKb = Math.round(blob.size / 1024);
+      showStatus("Your image is ready (" + sizeKb + " KB).", "success");
+      promptPreviewEl.textContent = "Prompt used: " + prompt;
+    })
+    .catch(function (error) {
+      console.error(error);
+      handleGenerationError(error);
+    })
+    .then(function () {
+      spinner.style.display = "none";
+      setBusy(false);
+    });
 }
 
 function buildLayeredPrompt(username, variationNumber) {
-  const name = username.toLowerCase();
+  var name = username.toLowerCase();
 
-  const subject = pickLayer(name, subjectKeywords, Object.values(subjectKeywords),
-    hashString(username + '|subject|' + variationNumber));
+  var subject = pickLayer(name, subjectKeywords, objectValues(subjectKeywords),
+    hashString(username + "|subject|" + variationNumber));
 
-  const setting = pickLayer(name, settingKeywords, Object.values(settingKeywords),
-    hashString(username + '|setting|' + variationNumber));
+  var setting = pickLayer(name, settingKeywords, objectValues(settingKeywords),
+    hashString(username + "|setting|" + variationNumber));
 
-  const lighting = pickLayer(name, lightingKeywords, lightingPool,
-    hashString(username + '|lighting|' + variationNumber));
+  var lighting = pickLayer(name, lightingKeywords, lightingPool,
+    hashString(username + "|lighting|" + variationNumber));
 
-  const atmosphere = pickLayer(name, atmosphereKeywords, atmospherePool,
-    hashString(username + '|atmosphere|' + variationNumber));
+  var atmosphere = pickLayer(name, atmosphereKeywords, atmospherePool,
+    hashString(username + "|atmosphere|" + variationNumber));
 
-  const style = pickLayer(name, styleKeywords, stylePool,
-    hashString(username + '|style|' + variationNumber));
+  var style = pickLayer(name, styleKeywords, stylePool,
+    hashString(username + "|style|" + variationNumber));
 
-  const palette = pickLayer(name, paletteKeywords, palettePool,
-    hashString(username + '|palette|' + variationNumber));
+  var palette = pickLayer(name, paletteKeywords, palettePool,
+    hashString(username + "|palette|" + variationNumber));
 
-  const random = seededRandom(hashString(username + '|composition|' + variationNumber));
-  const composition = compositionPool[Math.floor(random() * compositionPool.length)];
+  var compositionRandom = seededRandom(hashString(username + "|composition|" + variationNumber));
+  var composition = compositionPool[Math.floor(compositionRandom() * compositionPool.length)];
 
-  const numberPhrase = buildNumberPhrase(username,
-    seededRandom(hashString(username + '|number|' + variationNumber)));
+  var numberRandom = seededRandom(hashString(username + "|number|" + variationNumber));
+  var numberPhrase = buildNumberPhrase(username, numberRandom);
 
-  const parts = [subject, setting, lighting, atmosphere, numberPhrase, style, palette, composition]
-    .filter(Boolean);
+  var parts = [subject, setting, lighting, atmosphere, numberPhrase, style, palette, composition];
+  var filteredParts = [];
+  for (var i = 0; i < parts.length; i += 1) {
+    if (parts[i]) { filteredParts.push(parts[i]); }
+  }
 
-  let prompt = parts.join(', ');
+  var prompt = filteredParts.join(", ");
   if (prompt.length > 480) {
     prompt = prompt.slice(0, 480);
   }
   return prompt;
 }
 
-function pickLayer(name, keywordMap, fallbackPool, seed) {
-  for (const word of Object.keys(keywordMap)) {
-    if (name.includes(word)) {
-      return keywordMap[word];
+function objectValues(obj) {
+  var values = [];
+  for (var key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      values.push(obj[key]);
     }
   }
-  const random = seededRandom(seed);
+  return values;
+}
+
+function pickLayer(name, keywordMap, fallbackPool, seed) {
+  for (var word in keywordMap) {
+    if (Object.prototype.hasOwnProperty.call(keywordMap, word)) {
+      if (name.indexOf(word) !== -1) {
+        return keywordMap[word];
+      }
+    }
+  }
+  var random = seededRandom(seed);
   return fallbackPool[Math.floor(random() * fallbackPool.length)];
 }
 
 function buildNumberPhrase(username, random) {
-  const match = username.match(/\d+/);
-  if (!match) return '';
-  const number = parseInt(match[0], 10);
-  if (!Number.isFinite(number) || number <= 0) return '';
+  var match = username.match(/\d+/);
+  if (!match) { return ""; }
+  var number = parseInt(match[0], 10);
+  if (!isFinite(number) || number <= 0) { return ""; }
 
-  const smallCount = Math.min(Math.max(number, 1), 12);
-  const decorativeElements = [
-    'glowing orbs', 'floating candles', 'small stars', 'tiny lanterns',
-    'glowing runes', 'sparkling embers', 'floating petals', 'glowing crystals'
+  var smallCount = Math.min(Math.max(number, 1), 12);
+  var decorativeElements = [
+    "glowing orbs", "floating candles", "small stars", "tiny lanterns",
+    "glowing runes", "sparkling embers", "floating petals", "glowing crystals"
   ];
-  const element = decorativeElements[Math.floor(random() * decorativeElements.length)];
-  return `surrounded by exactly ${smallCount} ${element}`;
+  var element = decorativeElements[Math.floor(random() * decorativeElements.length)];
+  return "surrounded by exactly " + smallCount + " " + element;
 }
 
 function buildImageUrl(prompt, seed) {
-  const encodedPrompt = encodeURIComponent(prompt);
-  const params = new URLSearchParams({
+  var encodedPrompt = encodeURIComponent(prompt);
+  var params = new URLSearchParams({
     width: String(IMAGE_SIZE),
     height: String(IMAGE_SIZE),
-    model: 'flux',
+    model: "flux",
     seed: String(seed),
-    nologo: 'true'
+    nologo: "true"
   });
-  return `${API_BASE}${encodedPrompt}?${params.toString()}`;
+  return API_BASE + encodedPrompt + "?" + params.toString();
 }
 
 function fetchImageWithTimeout(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => {
+  return new Promise(function (resolve, reject) {
+    var controller = new AbortController();
+    var timeoutId = window.setTimeout(function () {
       controller.abort();
     }, timeoutMs);
 
-    fetch(url, { signal: controller.signal, mode: 'cors', cache: 'no-store' })
-      .then((response) => {
+    fetch(url, { signal: controller.signal, mode: "cors", cache: "no-store" })
+      .then(function (response) {
         window.clearTimeout(timeoutId);
         if (!response.ok) {
-          throw new Error(`The image service returned an error (status ${response.status}).`);
+          throw new Error("The image service returned an error (status " + response.status + ").");
         }
         return response.blob();
       })
-      .then((blob) => {
+      .then(function (blob) {
         if (!blob || blob.size === 0) {
-          throw new Error('The image service returned an empty response.');
+          throw new Error("The image service returned an empty response.");
         }
         return createImageBitmap(blob);
       })
       .then(resolve)
-      .catch((error) => {
+      .catch(function (error) {
         window.clearTimeout(timeoutId);
-        if (error && error.name === 'AbortError') {
-          reject(new Error('TIMEOUT'));
+        if (error && error.name === "AbortError") {
+          reject(new Error("TIMEOUT"));
         } else {
           reject(error);
         }
@@ -515,19 +526,19 @@ function fetchImageWithTimeout(url, timeoutMs) {
 
 function drawSquareArt(imageBitmap) {
   ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  ctx.fillStyle = '#0b0d18';
+  ctx.fillStyle = "#0b0d18";
   ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   ctx.drawImage(imageBitmap, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 }
 
 function exportUnder1MB() {
-  return new Promise((resolve, reject) => {
+  return new Promise(function (resolve, reject) {
     tryQuality(STARTING_QUALITY);
 
     function tryQuality(quality) {
-      canvas.toBlob((blob) => {
+      canvas.toBlob(function (blob) {
         if (!blob) {
-          reject(new Error('Your browser could not export the final image.'));
+          reject(new Error("Your browser could not export the final image."));
           return;
         }
         if (blob.size <= TARGET_BYTES || quality <= MINIMUM_QUALITY) {
@@ -535,36 +546,37 @@ function exportUnder1MB() {
           return;
         }
         tryQuality(Math.max(MINIMUM_QUALITY, quality - QUALITY_STEP));
-      }, 'image/jpeg', quality);
+      }, "image/jpeg", quality);
     }
   });
 }
 
 function handleGenerationError(error) {
-  let message = 'Something went wrong while creating your image. Please try again.';
+  var message = "Something went wrong while creating your image. Please try again.";
+  var errorMessage = (error && error.message) ? error.message : String(error);
 
-  if (error && error.message === 'TIMEOUT') {
-    message = 'The image service is taking too long to respond. Please wait a moment and try again.';
-  } else if (error && /status 429/i.test(error.message)) {
-    message = 'Too many requests right now. Please wait about 20 seconds and try again.';
-  } else if (error && /status 5\d\d/i.test(error.message)) {
-    message = 'The free image service is temporarily unavailable. Please try again shortly.';
-  } else if (error && /Failed to fetch|NetworkError|CORS/i.test(String(error.message || error))) {
-    message = 'Could not reach the free image service. Check your internet connection and try again.';
+  if (errorMessage === "TIMEOUT") {
+    message = "The image service is taking too long to respond. Please wait a moment and try again.";
+  } else if (/status 429/i.test(errorMessage)) {
+    message = "Too many requests right now. Please wait about 20 seconds and try again.";
+  } else if (/status 5\d\d/i.test(errorMessage)) {
+    message = "The free image service is temporarily unavailable. Please try again shortly.";
+  } else if (/Failed to fetch|NetworkError|CORS/i.test(errorMessage)) {
+    message = "Could not reach the free image service. Check your internet connection and try again.";
   }
 
-  showStatus(message, 'error');
-  stage.style.display = 'none';
+  showStatus(message, "error");
+  stage.style.display = "none";
 }
 
 function startCooldownCountdown(seconds) {
-  let remaining = seconds;
+  var remaining = seconds;
   createButton.disabled = true;
   anotherButton.disabled = true;
   updateCooldownText(remaining);
 
-  if (cooldownInterval) window.clearInterval(cooldownInterval);
-  cooldownInterval = window.setInterval(() => {
+  if (cooldownInterval) { window.clearInterval(cooldownInterval); }
+  cooldownInterval = window.setInterval(function () {
     remaining -= 1;
     if (remaining <= 0) {
       window.clearInterval(cooldownInterval);
@@ -579,7 +591,8 @@ function startCooldownCountdown(seconds) {
 }
 
 function updateCooldownText(remaining) {
-  showStatus(`Please wait ${remaining} second${remaining === 1 ? '' : 's'} before generating another image.`, 'info');
+  var unit = remaining === 1 ? "second" : "seconds";
+  showStatus("Please wait " + remaining + " " + unit + " before generating another image.", "info");
 }
 
 function setBusy(isBusy) {
@@ -589,35 +602,36 @@ function setBusy(isBusy) {
 }
 
 function hashString(text) {
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
+  var hash = 2166136261;
+  for (var index = 0; index < text.length; index += 1) {
+    hash = hash ^ text.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
 }
 
 function seededRandom(seed) {
-  return () => {
-    seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
-    return seed / 4294967296;
+  var state = seed;
+  return function () {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    return state / 4294967296;
   };
 }
 
 function safeFilename(text) {
-  const cleaned = text.replace(/[^a-z0-9_-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-  return cleaned || 'username';
+  var cleaned = text.replace(/[^a-z0-9_-]/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  return cleaned || "username";
 }
 
 function showStatus(message, type) {
   status.textContent = message;
   status.className = type;
-  status.style.display = 'block';
+  status.style.display = "block";
 }
 
 function hideStatus() {
-  status.textContent = '';
-  status.style.display = 'none';
+  status.textContent = "";
+  status.style.display = "none";
 }
 </script>
 </body>
