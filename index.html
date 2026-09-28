@@ -1,81 +1,422 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Make Image Ready to Post</title>
-  <style>
-    :root{--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#5c6a7e;--blue:#1769e0;--blue2:#1058c4;--green:#14733b;--red:#b3261e;--border:#d8e0eb}
-    *{box-sizing:border-box}body{align-items:center;background:var(--bg);color:var(--text);display:flex;font-family:Arial,Helvetica,sans-serif;justify-content:center;margin:0;min-height:100vh;padding:20px}
-    main{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 34px rgba(30,50,80,.12);max-width:470px;padding:28px 24px;text-align:center;width:100%}
-    h1{font-size:1.55rem;margin:0 0 10px}p{color:var(--muted);line-height:1.45;margin:0}#file-input{display:none}
-    #choose-button{align-items:center;background:var(--blue);border-radius:9px;color:#fff;cursor:pointer;display:flex;font-size:1rem;font-weight:700;justify-content:center;margin-top:24px;min-height:52px;padding:12px 16px;width:100%}
-    #choose-button:hover:not(.disabled){background:var(--blue2)}.disabled{cursor:wait!important;opacity:.65;pointer-events:none}#status{display:none;font-weight:600;margin-top:22px}#status.success{color:var(--green)}#status.error{color:var(--red)}.privacy{font-size:.82rem;margin-top:22px}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Username Image Generator</title>
+<style>
+  :root{--bg:#0f1220;--card:#161a2c;--text:#eef1fb;--muted:#9aa3bd;--border:#2b3050;--blue:#6d8cff;--blue2:#5a72e0;--green:#4ade80;--red:#ff6b6b}
+  *{box-sizing:border-box}
+  body{align-items:center;background:radial-gradient(circle at top,#1c2140,#0b0d18);color:var(--text);display:flex;font-family:Arial,Helvetica,sans-serif;justify-content:center;margin:0;min-height:100vh;padding:20px}
+  main{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,.45);max-width:520px;padding:30px 26px;text-align:center;width:100%}
+  h1{font-size:1.55rem;margin:0 0 8px}
+  p{color:var(--muted);line-height:1.5;margin:0}
+  input{background:#0e1122;border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;margin-top:22px;min-height:52px;padding:12px 14px;width:100%}
+  input::placeholder{color:#5c6584}
+  button,a.btn{align-items:center;background:var(--blue);border:0;border-radius:10px;color:#fff;cursor:pointer;display:flex;font:inherit;font-weight:700;justify-content:center;margin-top:12px;min-height:52px;padding:12px 16px;text-decoration:none;width:100%}
+  button:hover:not(:disabled),a.btn:hover{background:var(--blue2)}
+  button:disabled{cursor:not-allowed;opacity:.55}
+  #another-button{background:#2a3050}
+  #another-button:hover{background:#39406b}
+  #another-button,#download-button{display:none}
+  #stage{display:none;margin-top:22px;position:relative}
+  #preview{border-radius:14px;display:block;max-width:100%;width:100%}
+  #spinner{align-items:center;background:rgba(10,12,24,.72);border-radius:14px;bottom:0;display:none;flex-direction:column;gap:12px;justify-content:center;left:0;position:absolute;right:0;top:0}
+  .ring{animation:spin 1s linear infinite;border:5px solid rgba(255,255,255,.18);border-radius:50%;border-top-color:var(--blue);height:44px;width:44px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #status{display:none;font-size:.95rem;font-weight:600;margin-top:16px}
+  #status.info{color:var(--muted)}
+  #status.success{color:var(--green)}
+  #status.error{color:var(--red)}
+  .note{color:var(--muted);font-size:.78rem;margin-top:20px;line-height:1.5}
+  canvas{display:none}
+</style>
 </head>
 <body>
 <main>
-  <h1>Make Image Ready to Post</h1>
-  <p>Choose an image. It will automatically be made smaller than 1 MB.</p>
-  <input id="file-input" type="file" accept="image/*">
-  <label id="choose-button" for="file-input">Choose image</label>
+  <h1>AI Username Image Generator</h1>
+  <p>Enter a username. A real AI-generated illustration is created just for it, with your name added as a clean caption.</p>
+
+  <input id="username-input" type="text" maxlength="40" autocomplete="username" placeholder="Enter your username">
+
+  <button id="create-button" type="button">Create my image</button>
+
+  <div id="stage">
+    <img id="preview" alt="AI generated username illustration">
+    <div id="spinner"><div class="ring"></div><div id="spinner-text" style="color:#cfd4ec;font-size:.9rem">Creating your image...</div></div>
+  </div>
+
   <p id="status" role="status" aria-live="polite"></p>
-  <p class="privacy">Your image stays on your device. It is never uploaded to this website.</p>
+
+  <button id="another-button" type="button">Make another version</button>
+  <a id="download-button" class="btn" href="#" download>Download image</a>
+
+  <p class="note">
+    Your username is used to build an art prompt sent to the free Pollinations.ai
+    image service to render the picture. No account, sign-up, or payment is used.
+    Final text and framing are added in your browser and are never sent anywhere.
+  </p>
+
+  <canvas id="composite-canvas" width="1024" height="1200"></canvas>
 </main>
+
 <script>
 'use strict';
-const TARGET_BYTES=950*1024,MAX_DIMENSION=1920,STARTING_QUALITY=.92,MINIMUM_QUALITY=.45,QUALITY_STEP=.05,RESIZE_MULTIPLIER=.85,MINIMUM_DIMENSION=320,RETURN_DELAY_MS=1800;
-const fileInput=document.getElementById('file-input'),chooseButton=document.getElementById('choose-button'),status=document.getElementById('status');
-let returnAttempted=false;
 
-fileInput.addEventListener('change',async()=>{
-  const file=fileInput.files[0]; if(!file)return;
-  if(!file.type.startsWith('image/')){showStatus('Please choose an image file.','error');fileInput.value='';return;}
-  chooseButton.classList.add('disabled'); showStatus('Preparing and downloading your image...','');
-  try{
-    const blob=await compressImage(file);
-    downloadBlob(blob,filenameWithoutExtension(file.name)+'-ready-to-post.jpg');
-    showStatus('Your image is downloading. Returning to the previous page...','success');
-    window.setTimeout(returnToPreviousPage,RETURN_DELAY_MS);
-  }catch(error){
-    showStatus(error.message||'The image could not be prepared. Please try another image.','error');
-    chooseButton.classList.remove('disabled');
-  }finally{fileInput.value=''}
-});
+const API_BASE = 'https://image.pollinations.ai/prompt/';
+const IMAGE_SIZE = 1024;
+const CANVAS_WIDTH = 1024;
+const CANVAS_HEIGHT = 1200;
+const MIN_SECONDS_BETWEEN_REQUESTS = 16;
+const REQUEST_TIMEOUT_MS = 55000;
 
-async function compressImage(file){
-  const image=await loadImage(file); let width=image.naturalWidth,height=image.naturalHeight;
-  if(!width||!height)throw new Error('This image has no usable dimensions. Please try another image.');
-  const longest=Math.max(width,height); if(longest>MAX_DIMENSION){const scale=MAX_DIMENSION/longest;width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale))}
-  while(width>=MINIMUM_DIMENSION&&height>=MINIMUM_DIMENSION){for(let quality=STARTING_QUALITY;quality>=MINIMUM_QUALITY-.0001;quality-=QUALITY_STEP){const blob=await createJpeg(image,width,height,quality);if(blob.size<=TARGET_BYTES)return blob}width=Math.round(width*RESIZE_MULTIPLIER);height=Math.round(height*RESIZE_MULTIPLIER)}
-  throw new Error('This image could not be made smaller than 1 MB while keeping a usable size.');
-}
-function loadImage(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('This image could not be opened by your browser. Please try another image.'))};image.src=url})}
-function createJpeg(image,width,height,quality){return new Promise((resolve,reject)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx){reject(new Error('Your browser could not prepare this image.'));return}ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Your browser could not create the image file.')),'image/jpeg',quality)})}
-function downloadBlob(blob,filename){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.style.display='none';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),30000)}
+const usernameInput = document.getElementById('username-input');
+const createButton = document.getElementById('create-button');
+const anotherButton = document.getElementById('another-button');
+const downloadButton = document.getElementById('download-button');
+const stage = document.getElementById('stage');
+const preview = document.getElementById('preview');
+const spinner = document.getElementById('spinner');
+const spinnerText = document.getElementById('spinner-text');
+const status = document.getElementById('status');
+const canvas = document.getElementById('composite-canvas');
+const ctx = canvas.getContext('2d');
 
-function returnToPreviousPage(){
-  if(returnAttempted)return;
-  returnAttempted=true;
+let variation = 0;
+let lastRequestTime = 0;
+let cooldownInterval = null;
+let currentObjectUrl = null;
 
-  if(window.history.length>1){
-    window.history.back();
-    window.setTimeout(showManualReturn,1400);
+const subjectTemplates = [
+  'a majestic dragon perched on a cliff at golden hour, glowing scales, cinematic',
+  'a futuristic chrome robot standing in a neon-lit alley, rain reflections, cyberpunk',
+  'a tall stone castle on a misty mountain peak, dramatic clouds, fantasy matte painting',
+  'a sleek silver rocket launching through colorful clouds toward a starry sky',
+  'a glowing alien UFO hovering above a quiet desert at night, atmospheric lighting',
+  'a fierce tiger walking through a bioluminescent jungle at midnight',
+  'a pirate ship sailing through stormy turquoise seas under a dramatic sky',
+  'an ornate golden treasure chest overflowing with jewels in a hidden cave',
+  'a wise old owl perched on a glowing lantern in an enchanted forest',
+  'a vintage film camera resting on a rustic wooden table beside warm candlelight',
+  'an electric guitar engulfed in colorful smoke and stage lights, concert atmosphere',
+  'a crystal planet orbited by rings of stardust in deep space, nebula background',
+  'a fierce wolf howling on a snowy mountain ridge under the northern lights',
+  'a red fox sitting in an autumn forest covered in falling golden leaves',
+  'a knight in ornate silver armor holding a glowing enchanted sword',
+  'a jeweled crown resting on a velvet pillow, dramatic studio lighting',
+  'a vintage motorcycle parked on a neon Tokyo street at night, cinematic rain',
+  'a bright red race car speeding through a glowing futuristic city tunnel',
+  'a giant blooming rose surrounded by fireflies in a moonlit garden',
+  'a phoenix bursting into flame above an ancient temple at sunrise',
+  'a curious cat sitting on a windowsill overlooking a starry night sky',
+  'a loyal husky dog standing on an icy glacier under aurora borealis',
+  'a great white shark swimming through crystal clear turquoise ocean water',
+  'a steaming cup of coffee beside an open book in warm morning light',
+  'a slice of pizza on a rustic table with steam rising, cozy diner lighting',
+  'a skateboard leaning against a colorful graffiti wall in golden sunset light',
+  'a mysterious hooded wizard casting a glowing blue spell in a dark forest',
+  'a majestic griffin soaring above snow capped mountains at dawn',
+  'an astronaut floating above Earth with the sun rising behind the planet',
+  'a glowing treasure map illuminated by candlelight on an old wooden desk'
+];
+
+const styleModifiers = [
+  'highly detailed digital painting, dramatic lighting, trending on artstation',
+  'vibrant colors, hyper detailed, epic fantasy concept art',
+  'cinematic lighting, ultra detailed, 8k digital illustration',
+  'moody atmosphere, painterly brush strokes, award winning illustration',
+  'soft glowing light, intricate details, professional concept art',
+  'bold saturated colors, dynamic composition, digital art masterpiece'
+];
+
+const keywordMap = [
+  { words: ['rocket','space','moon','astro'], subject: 'a sleek silver rocket launching through colorful clouds toward a starry sky' },
+  { words: ['dragon','knight','magic','wizard'], subject: 'a majestic dragon perched on a cliff at golden hour, glowing scales, cinematic' },
+  { words: ['castle','king','queen','royal'], subject: 'a tall stone castle on a misty mountain peak, dramatic clouds, fantasy matte painting' },
+  { words: ['ship','boat','pirate','ocean','sea'], subject: 'a pirate ship sailing through stormy turquoise seas under a dramatic sky' },
+  { words: ['ufo','alien'], subject: 'a glowing alien UFO hovering above a quiet desert at night, atmospheric lighting' },
+  { words: ['robot','bot','cyber'], subject: 'a futuristic chrome robot standing in a neon-lit alley, rain reflections, cyberpunk' },
+  { words: ['camera','photo','film'], subject: 'a vintage film camera resting on a rustic wooden table beside warm candlelight' },
+  { words: ['guitar','music','rock','song'], subject: 'an electric guitar engulfed in colorful smoke and stage lights, concert atmosphere' },
+  { words: ['crown'], subject: 'a jeweled crown resting on a velvet pillow, dramatic studio lighting' },
+  { words: ['sword','blade','warrior'], subject: 'a knight in ornate silver armor holding a glowing enchanted sword' },
+  { words: ['treasure','gold','coin'], subject: 'an ornate golden treasure chest overflowing with jewels in a hidden cave' },
+  { words: ['pizza'], subject: 'a slice of pizza on a rustic table with steam rising, cozy diner lighting' },
+  { words: ['coffee','cafe'], subject: 'a steaming cup of coffee beside an open book in warm morning light' },
+  { words: ['skate'], subject: 'a skateboard leaning against a colorful graffiti wall in golden sunset light' },
+  { words: ['car','race','speed'], subject: 'a bright red race car speeding through a glowing futuristic city tunnel' },
+  { words: ['bike','motor','cycle'], subject: 'a vintage motorcycle parked on a neon Tokyo street at night, cinematic rain' },
+  { words: ['owl'], subject: 'a wise old owl perched on a glowing lantern in an enchanted forest' },
+  { words: ['wolf'], subject: 'a fierce wolf howling on a snowy mountain ridge under the northern lights' },
+  { words: ['tiger'], subject: 'a fierce tiger walking through a bioluminescent jungle at midnight' },
+  { words: ['fox'], subject: 'a red fox sitting in an autumn forest covered in falling golden leaves' },
+  { words: ['shark'], subject: 'a great white shark swimming through crystal clear turquoise ocean water' },
+  { words: ['cat','kitten','meow'], subject: 'a curious cat sitting on a windowsill overlooking a starry night sky' },
+  { words: ['dog','puppy','husky'], subject: 'a loyal husky dog standing on an icy glacier under aurora borealis' },
+  { words: ['flower','rose','garden'], subject: 'a giant blooming rose surrounded by fireflies in a moonlit garden' },
+  { words: ['planet','galaxy','universe'], subject: 'a crystal planet orbited by rings of stardust in deep space, nebula background' },
+  { words: ['phoenix','fire','flame'], subject: 'a phoenix bursting into flame above an ancient temple at sunrise' },
+  { words: ['griffin'], subject: 'a majestic griffin soaring above snow capped mountains at dawn' },
+  { words: ['astronaut'], subject: 'an astronaut floating above Earth with the sun rising behind the planet' }
+];
+
+createButton.addEventListener('click', () => generateImage(0));
+anotherButton.addEventListener('click', () => generateImage(variation + 1));
+usernameInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') generateImage(0); });
+
+async function generateImage(nextVariation) {
+  const username = usernameInput.value.trim();
+
+  if (!username) {
+    showStatus('Please enter a username.', 'error');
+    return;
+  }
+  if (username.length > 40) {
+    showStatus('Please use 40 characters or fewer.', 'error');
     return;
   }
 
-  try{ if(window.opener&&!window.opener.closed) window.opener.focus(); }catch(_){}
-  try{ window.close(); }catch(_){}
+  const secondsSinceLast = (Date.now() - lastRequestTime) / 1000;
+  if (lastRequestTime && secondsSinceLast < MIN_SECONDS_BETWEEN_REQUESTS) {
+    startCooldownCountdown(Math.ceil(MIN_SECONDS_BETWEEN_REQUESTS - secondsSinceLast));
+    return;
+  }
 
-  window.setTimeout(showManualReturn,800);
+  variation = nextVariation;
+  lastRequestTime = Date.now();
+
+  setBusy(true);
+  hideStatus();
+  stage.style.display = 'block';
+  spinner.style.display = 'flex';
+  spinnerText.textContent = 'Creating your image... this can take up to 30 seconds.';
+  preview.style.visibility = 'hidden';
+
+  try {
+    const random = seededRandom(hashString(username + '|' + variation));
+    const subject = chooseSubject(username, random);
+    const style = styleModifiers[Math.floor(random() * styleModifiers.length)];
+    const seed = Math.floor(random() * 1000000);
+    const prompt = `${subject}, ${style}`;
+    const imageUrl = buildImageUrl(prompt, seed);
+
+    const imageBitmap = await fetchImageWithTimeout(imageUrl, REQUEST_TIMEOUT_MS);
+
+    drawComposite(imageBitmap, username);
+
+    await exportCanvas(username);
+
+    showStatus('Your image is ready.', 'success');
+  } catch (error) {
+    console.error(error);
+    handleGenerationError(error);
+  } finally {
+    spinner.style.display = 'none';
+    setBusy(false);
+  }
 }
 
-function showManualReturn(){
-  showStatus('Your image was downloaded. Please return to the previous tab and upload the saved image.','success');
-  chooseButton.classList.remove('disabled');
+function chooseSubject(username, random) {
+  const name = username.toLowerCase();
+  for (const entry of keywordMap) {
+    if (entry.words.some((word) => name.includes(word))) {
+      return entry.subject;
+    }
+  }
+  return subjectTemplates[Math.floor(random() * subjectTemplates.length)];
 }
-function showStatus(message,type){status.textContent=message;status.className=type;status.style.display='block'}
-function filenameWithoutExtension(name){const i=name.lastIndexOf('.');return i>0?name.slice(0,i):name}
+
+function buildImageUrl(prompt, seed) {
+  const encodedPrompt = encodeURIComponent(prompt);
+  const params = new URLSearchParams({
+    width: String(IMAGE_SIZE),
+    height: String(IMAGE_SIZE),
+    model: 'flux',
+    seed: String(seed),
+    nologo: 'true'
+  });
+  return `${API_BASE}${encodedPrompt}?${params.toString()}`;
+}
+
+function fetchImageWithTimeout(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    fetch(url, { signal: controller.signal, mode: 'cors', cache: 'no-store' })
+      .then((response) => {
+        window.clearTimeout(timeoutId);
+        if (!response.ok) {
+          throw new Error(`The image service returned an error (status ${response.status}).`);
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!blob || blob.size === 0) {
+          throw new Error('The image service returned an empty response.');
+        }
+        return createImageBitmap(blob);
+      })
+      .then(resolve)
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        if (error && error.name === 'AbortError') {
+          reject(new Error('TIMEOUT'));
+        } else {
+          reject(error);
+        }
+      });
+  });
+}
+
+function drawComposite(imageBitmap, username) {
+  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  ctx.fillStyle = '#0b0d18';
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  const artSize = CANVAS_WIDTH;
+  ctx.drawImage(imageBitmap, 0, 0, artSize, artSize);
+
+  const vignette = ctx.createRadialGradient(
+    CANVAS_WIDTH / 2, artSize / 2, artSize * 0.25,
+    CANVAS_WIDTH / 2, artSize / 2, artSize * 0.72
+  );
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.38)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, artSize, artSize);
+
+  const plaqueGradient = ctx.createLinearGradient(0, artSize, CANVAS_WIDTH, CANVAS_HEIGHT);
+  plaqueGradient.addColorStop(0, '#11142a');
+  plaqueGradient.addColorStop(1, '#191c38');
+  ctx.fillStyle = plaqueGradient;
+  ctx.fillRect(0, artSize, CANVAS_WIDTH, CANVAS_HEIGHT - artSize);
+
+  ctx.strokeStyle = 'rgba(120,140,255,0.55)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, CANVAS_WIDTH - 4, CANVAS_HEIGHT - 4);
+
+  const displayedName = username.length > 22 ? username.slice(0, 19) + '...' : username;
+  let fontSize = 58;
+  ctx.font = `700 ${fontSize}px Arial`;
+  while (ctx.measureText(displayedName).width > CANVAS_WIDTH - 100 && fontSize > 28) {
+    fontSize -= 2;
+    ctx.font = `700 ${fontSize}px Arial`;
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(displayedName, CANVAS_WIDTH / 2, artSize + (CANVAS_HEIGHT - artSize) / 2 - 8);
+
+  ctx.font = '400 22px Arial';
+  ctx.fillStyle = 'rgba(180,190,230,0.85)';
+  ctx.fillText('AI-generated username art', CANVAS_WIDTH / 2, artSize + (CANVAS_HEIGHT - artSize) / 2 + 34);
+}
+
+function exportCanvas(username) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Your browser could not export the final image.'));
+        return;
+      }
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+      currentObjectUrl = URL.createObjectURL(blob);
+      preview.src = currentObjectUrl;
+      preview.style.visibility = 'visible';
+      downloadButton.href = currentObjectUrl;
+      downloadButton.download = safeFilename(username) + '-ai-username-image.png';
+      downloadButton.style.display = 'flex';
+      anotherButton.style.display = 'flex';
+      resolve();
+    }, 'image/png');
+  });
+}
+
+function handleGenerationError(error) {
+  let message = 'Something went wrong while creating your image. Please try again.';
+
+  if (error && error.message === 'TIMEOUT') {
+    message = 'The image service is taking too long to respond. Please wait a moment and try again.';
+  } else if (error && /status 429/i.test(error.message)) {
+    message = 'Too many requests right now. Please wait about 20 seconds and try again.';
+  } else if (error && /status 5\d\d/i.test(error.message)) {
+    message = 'The free image service is temporarily unavailable. Please try again shortly.';
+  } else if (error && /Failed to fetch|NetworkError|CORS/i.test(String(error.message || error))) {
+    message = 'Could not reach the free image service. Check your internet connection and try again.';
+  }
+
+  showStatus(message, 'error');
+  stage.style.display = 'none';
+}
+
+function startCooldownCountdown(seconds) {
+  let remaining = seconds;
+  createButton.disabled = true;
+  anotherButton.disabled = true;
+  updateCooldownText(remaining);
+
+  if (cooldownInterval) window.clearInterval(cooldownInterval);
+  cooldownInterval = window.setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      window.clearInterval(cooldownInterval);
+      cooldownInterval = null;
+      createButton.disabled = false;
+      anotherButton.disabled = false;
+      hideStatus();
+      return;
+    }
+    updateCooldownText(remaining);
+  }, 1000);
+}
+
+function updateCooldownText(remaining) {
+  showStatus(`Please wait ${remaining} second${remaining === 1 ? '' : 's'} before generating another image.`, 'info');
+}
+
+function setBusy(isBusy) {
+  createButton.disabled = isBusy;
+  anotherButton.disabled = isBusy;
+  usernameInput.disabled = isBusy;
+}
+
+function hashString(text) {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededRandom(seed) {
+  return () => {
+    seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+function safeFilename(text) {
+  const cleaned = text.replace(/[^a-z0-9_-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  return cleaned || 'username';
+}
+
+function showStatus(message, type) {
+  status.textContent = message;
+  status.className = type;
+  status.style.display = 'block';
+}
+
+function hideStatus() {
+  status.textContent = '';
+  status.style.display = 'none';
+}
 </script>
 </body>
 </html>
