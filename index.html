@@ -28,6 +28,7 @@
   #status.info{color:var(--muted)}
   #status.success{color:var(--green)}
   #status.error{color:var(--red)}
+  #prompt-preview{color:#7a86b8;font-size:.72rem;line-height:1.5;margin-top:14px;word-break:break-word}
   .note{color:var(--muted);font-size:.78rem;margin-top:20px;line-height:1.5}
   canvas{display:none}
 </style>
@@ -35,7 +36,7 @@
 <body>
 <main>
   <h1>AI Username Image Generator</h1>
-  <p>Enter a username. A real AI-generated square illustration is created just for it, sized to stay under 1 MB.</p>
+  <p>Enter a username. A layered prompt engine builds a detailed one-of-a-kind scene and sends it to a free AI image service.</p>
 
   <input id="username-input" type="text" maxlength="40" autocomplete="username" placeholder="Enter your username">
 
@@ -51,13 +52,15 @@
   <button id="another-button" type="button">Make another version</button>
   <a id="download-button" class="btn" href="#" download>Download image</a>
 
+  <p id="prompt-preview"></p>
+
   <p class="note">
-    Your username selects an art prompt sent to the free Pollinations.ai image
-    service to render the picture. No account, sign-up, or payment is used.
-    Watermark removal is requested automatically and usually succeeds, but
-    Pollinations does not guarantee a watermark-free result for anonymous,
-    key-free requests &mdash; only for their free registered accounts.
-    The final image is compressed in your browser to stay under 1 MB.
+    Your username selects a layered art prompt (subject, setting, lighting,
+    atmosphere, style, palette, composition) sent to the free Pollinations.ai
+    image service. No account, sign-up, or payment is used. Watermark removal
+    is requested automatically and usually succeeds, but is not guaranteed for
+    anonymous, key-free requests. The final image is compressed in your
+    browser to stay under 1 MB.
   </p>
 
   <canvas id="composite-canvas" width="1024" height="1024"></canvas>
@@ -85,6 +88,7 @@ const preview = document.getElementById('preview');
 const spinner = document.getElementById('spinner');
 const spinnerText = document.getElementById('spinner-text');
 const status = document.getElementById('status');
+const promptPreviewEl = document.getElementById('prompt-preview');
 const canvas = document.getElementById('composite-canvas');
 const ctx = canvas.getContext('2d');
 
@@ -93,77 +97,248 @@ let lastRequestTime = 0;
 let cooldownInterval = null;
 let currentObjectUrl = null;
 
-const subjectTemplates = [
-  'a majestic dragon perched on a cliff at golden hour, glowing scales, cinematic',
-  'a futuristic chrome robot standing in a neon-lit alley, rain reflections, cyberpunk',
-  'a tall stone castle on a misty mountain peak, dramatic clouds, fantasy matte painting',
-  'a sleek silver rocket launching through colorful clouds toward a starry sky',
-  'a glowing alien UFO hovering above a quiet desert at night, atmospheric lighting',
-  'a fierce tiger walking through a bioluminescent jungle at midnight',
-  'a pirate ship sailing through stormy turquoise seas under a dramatic sky',
-  'an ornate golden treasure chest overflowing with jewels in a hidden cave',
-  'a wise old owl perched on a glowing lantern in an enchanted forest',
-  'a vintage film camera resting on a rustic wooden table beside warm candlelight',
-  'an electric guitar engulfed in colorful smoke and stage lights, concert atmosphere',
-  'a crystal planet orbited by rings of stardust in deep space, nebula background',
-  'a fierce wolf howling on a snowy mountain ridge under the northern lights',
-  'a red fox sitting in an autumn forest covered in falling golden leaves',
-  'a knight in ornate silver armor holding a glowing enchanted sword',
-  'a jeweled crown resting on a velvet pillow, dramatic studio lighting',
-  'a vintage motorcycle parked on a neon Tokyo street at night, cinematic rain',
-  'a bright red race car speeding through a glowing futuristic city tunnel',
-  'a giant blooming rose surrounded by fireflies in a moonlit garden',
-  'a phoenix bursting into flame above an ancient temple at sunrise',
-  'a curious cat sitting on a windowsill overlooking a starry night sky',
-  'a loyal husky dog standing on an icy glacier under aurora borealis',
-  'a great white shark swimming through crystal clear turquoise ocean water',
-  'a steaming cup of coffee beside an open book in warm morning light',
-  'a slice of pizza on a rustic table with steam rising, cozy diner lighting',
-  'a skateboard leaning against a colorful graffiti wall in golden sunset light',
-  'a mysterious hooded wizard casting a glowing blue spell in a dark forest',
-  'a majestic griffin soaring above snow capped mountains at dawn',
-  'an astronaut floating above Earth with the sun rising behind the planet',
-  'a glowing treasure map illuminated by candlelight on an old wooden desk'
-];
+/* ---------- LAYER 1: SUBJECT (main character or object) ---------- */
+const subjectKeywords = {
+  dragon: 'a majestic ancient dragon with glowing scales',
+  knight: 'a knight in ornate battle-worn armor',
+  wizard: 'a mysterious hooded wizard holding a glowing staff',
+  witch: 'a witch with a pointed hat and glowing potion bottles',
+  unicorn: 'a radiant unicorn with a flowing rainbow mane',
+  mermaid: 'a graceful mermaid with shimmering iridescent scales',
+  vampire: 'a elegant vampire in a dark velvet cloak',
+  zombie: 'a stylized zombie wandering through fog',
+  ghost: 'a translucent glowing ghost drifting through darkness',
+  ninja: 'a stealthy ninja leaping between rooftops',
+  samurai: 'a samurai warrior holding a katana, cherry blossoms falling',
+  pirate: 'a rugged pirate captain standing on a ship deck',
+  viking: 'a fierce viking warrior with a battle axe',
+  robot: 'a futuristic chrome robot with glowing circuitry',
+  cyborg: 'a battle-damaged cyborg with glowing red optics',
+  alien: 'a glowing alien creature with luminescent skin',
+  astronaut: 'an astronaut in a reflective visor helmet',
+  griffin: 'a majestic griffin with feathered wings',
+  phoenix: 'a phoenix bursting into brilliant flame',
+  wolf: 'a fierce wolf with piercing amber eyes',
+  fox: 'a sly red fox with a bushy tail',
+  tiger: 'a powerful tiger with vivid orange stripes',
+  lion: 'a regal lion with a flowing golden mane',
+  panther: 'a sleek black panther prowling silently',
+  bear: 'a massive grizzly bear standing on a riverbank',
+  owl: 'a wise owl with piercing golden eyes',
+  eagle: 'a bald eagle soaring with wings spread wide',
+  hawk: 'a fierce hawk diving through the air',
+  falcon: 'a swift falcon in mid flight',
+  shark: 'a great white shark gliding through deep water',
+  whale: 'a massive humpback whale breaching the ocean surface',
+  dolphin: 'a playful dolphin leaping through ocean spray',
+  octopus: 'a glowing bioluminescent octopus in deep water',
+  cat: 'a curious cat with piercing eyes',
+  dog: 'a loyal dog with a joyful expression',
+  husky: 'a husky with striking blue eyes in snow',
+  fish: 'a colorful tropical fish swimming through coral',
+  horse: 'a wild horse galloping through an open field',
+  deer: 'a graceful deer standing in a misty forest',
+  rabbit: 'a small rabbit sitting in tall grass at dawn',
+  panda: 'a panda resting among bamboo leaves',
+  koala: 'a koala resting in a eucalyptus tree',
+  penguin: 'a penguin standing on an icy shore',
+  butterfly: 'a butterfly with intricately patterned wings',
+  spider: 'a detailed spider with glistening dew-covered web',
+  snake: 'a coiled snake with iridescent scales',
+  bee: 'a bee hovering beside a blooming flower',
+  rocket: 'a sleek chrome rocket launching skyward',
+  spaceship: 'a futuristic spaceship gliding through the stars',
+  ufo: 'a glowing alien UFO hovering in the night sky',
+  car: 'a sleek sports car glistening under city lights',
+  motorcycle: 'a vintage motorcycle parked under neon signs',
+  bike: 'a mountain bike resting on a rocky trail',
+  train: 'an old steam train crossing a mountain bridge',
+  plane: 'a vintage airplane flying above scattered clouds',
+  ship: 'a wooden sailing ship cutting through ocean waves',
+  submarine: 'a glowing yellow submarine deep underwater',
+  castle: 'a towering stone castle on a cliffside',
+  temple: 'an ancient overgrown temple hidden in the jungle',
+  pyramid: 'a golden pyramid glowing under a desert sunset',
+  lighthouse: 'a lighthouse standing against crashing waves',
+  windmill: 'an old windmill on a rolling green hillside',
+  treehouse: 'a cozy treehouse nestled in glowing forest branches',
+  crown: 'an ornate jeweled crown resting on velvet',
+  sword: 'a glowing enchanted sword embedded in stone',
+  shield: 'an ornately engraved battle shield',
+  treasure: 'a golden treasure chest overflowing with jewels',
+  compass: 'an antique brass compass resting on an old map',
+  hourglass: 'a glowing hourglass with swirling golden sand',
+  guitar: 'an electric guitar wrapped in colorful stage smoke',
+  piano: 'a grand piano bathed in warm spotlight',
+  camera: 'a vintage film camera resting on worn leather',
+  book: 'an ancient glowing spellbook with floating runes',
+  telescope: 'a brass telescope pointed toward a starry sky',
+  balloon: 'a hot air balloon drifting above rolling hills',
+  kite: 'a colorful kite soaring against a bright sky',
+  flower: 'a giant blooming flower glowing with morning dew',
+  tree: 'an ancient glowing tree with sprawling roots',
+  mountain: 'a jagged snow capped mountain peak',
+  volcano: 'an erupting volcano glowing with molten lava',
+  pizza: 'a steaming slice of pizza with melted cheese',
+  coffee: 'a steaming cup of coffee beside an open book',
+  cake: 'an elaborate multi tier birthday cake with candles',
+  donut: 'a glazed donut with colorful sprinkles',
+  skateboard: 'a skateboard leaning against a graffiti covered wall',
+  surfboard: 'a surfboard standing upright in golden sand',
+  controller: 'a glowing futuristic game controller',
+  dice: 'a pair of glowing dice mid roll',
+  chess: 'an ornate chess king piece on a marble board',
+  planet: 'a glowing crystal planet ringed with stardust',
+  moon: 'a glowing full moon behind wispy clouds',
+  star: 'a brilliant shooting star streaking across the sky',
+  galaxy: 'a swirling spiral galaxy filled with colorful nebulae',
+  comet: 'a blazing comet streaking through deep space',
+  ice: 'a glowing ice crystal formation',
+  fire: 'a swirling vortex of magical flame',
+  lightning: 'a bolt of lightning splitting a stormy sky',
+  rainbow: 'a vivid rainbow arching over rolling hills',
+  crystal: 'a cluster of glowing magical crystals',
+  gem: 'a brilliant cut gemstone catching the light'
+};
 
-const styleModifiers = [
-  'highly detailed digital painting, dramatic lighting, trending on artstation',
-  'vibrant colors, hyper detailed, epic fantasy concept art',
-  'cinematic lighting, ultra detailed, 8k digital illustration',
-  'moody atmosphere, painterly brush strokes, award winning illustration',
-  'soft glowing light, intricate details, professional concept art',
-  'bold saturated colors, dynamic composition, digital art masterpiece'
-];
+/* ---------- LAYER 2: SETTING (environment / backdrop) ---------- */
+const settingKeywords = {
+  space: 'floating in deep space among distant stars',
+  galaxy: 'set against a swirling galaxy backdrop',
+  ocean: 'surrounded by vast turquoise ocean water',
+  underwater: 'deep underwater surrounded by drifting light rays',
+  forest: 'standing within a dense ancient forest',
+  jungle: 'deep within a lush overgrown jungle',
+  desert: 'standing on windswept desert sand dunes',
+  mountain: 'high on a windswept mountain ridge',
+  arctic: 'surrounded by icy arctic tundra',
+  snow: 'standing in a heavy snowfall',
+  volcano: 'near the glowing edge of an active volcano',
+  cave: 'inside a glowing crystal cave',
+  city: 'within a sprawling glowing city skyline',
+  cyberpunk: 'in a neon soaked cyberpunk cityscape',
+  village: 'within a quiet medieval stone village',
+  ruins: 'among ancient crumbling stone ruins',
+  temple: 'inside an ornate glowing temple',
+  garden: 'within a blooming secret garden',
+  meadow: 'in a wide sunlit meadow of wildflowers',
+  swamp: 'within a misty glowing swamp',
+  canyon: 'within a dramatic sunlit canyon',
+  beach: 'along a quiet windswept shoreline',
+  sky: 'high above the clouds in open sky',
+  library: 'inside a towering candlelit ancient library',
+  workshop: 'inside a cluttered glowing inventor workshop',
+  market: 'within a bustling lantern lit night market',
+  carnival: 'inside a glowing colorful carnival at night'
+};
 
-const keywordMap = [
-  { words: ['rocket','space','moon','astro'], subject: 'a sleek silver rocket launching through colorful clouds toward a starry sky' },
-  { words: ['dragon','knight','magic','wizard'], subject: 'a majestic dragon perched on a cliff at golden hour, glowing scales, cinematic' },
-  { words: ['castle','king','queen','royal'], subject: 'a tall stone castle on a misty mountain peak, dramatic clouds, fantasy matte painting' },
-  { words: ['ship','boat','pirate','ocean','sea'], subject: 'a pirate ship sailing through stormy turquoise seas under a dramatic sky' },
-  { words: ['ufo','alien'], subject: 'a glowing alien UFO hovering above a quiet desert at night, atmospheric lighting' },
-  { words: ['robot','bot','cyber'], subject: 'a futuristic chrome robot standing in a neon-lit alley, rain reflections, cyberpunk' },
-  { words: ['camera','photo','film'], subject: 'a vintage film camera resting on a rustic wooden table beside warm candlelight' },
-  { words: ['guitar','music','rock','song'], subject: 'an electric guitar engulfed in colorful smoke and stage lights, concert atmosphere' },
-  { words: ['crown'], subject: 'a jeweled crown resting on a velvet pillow, dramatic studio lighting' },
-  { words: ['sword','blade','warrior'], subject: 'a knight in ornate silver armor holding a glowing enchanted sword' },
-  { words: ['treasure','gold','coin'], subject: 'an ornate golden treasure chest overflowing with jewels in a hidden cave' },
-  { words: ['pizza'], subject: 'a slice of pizza on a rustic table with steam rising, cozy diner lighting' },
-  { words: ['coffee','cafe'], subject: 'a steaming cup of coffee beside an open book in warm morning light' },
-  { words: ['skate'], subject: 'a skateboard leaning against a colorful graffiti wall in golden sunset light' },
-  { words: ['car','race','speed'], subject: 'a bright red race car speeding through a glowing futuristic city tunnel' },
-  { words: ['bike','motor','cycle'], subject: 'a vintage motorcycle parked on a neon Tokyo street at night, cinematic rain' },
-  { words: ['owl'], subject: 'a wise old owl perched on a glowing lantern in an enchanted forest' },
-  { words: ['wolf'], subject: 'a fierce wolf howling on a snowy mountain ridge under the northern lights' },
-  { words: ['tiger'], subject: 'a fierce tiger walking through a bioluminescent jungle at midnight' },
-  { words: ['fox'], subject: 'a red fox sitting in an autumn forest covered in falling golden leaves' },
-  { words: ['shark'], subject: 'a great white shark swimming through crystal clear turquoise ocean water' },
-  { words: ['cat','kitten','meow'], subject: 'a curious cat sitting on a windowsill overlooking a starry night sky' },
-  { words: ['dog','puppy','husky'], subject: 'a loyal husky dog standing on an icy glacier under aurora borealis' },
-  { words: ['flower','rose','garden'], subject: 'a giant blooming rose surrounded by fireflies in a moonlit garden' },
-  { words: ['planet','galaxy','universe'], subject: 'a crystal planet orbited by rings of stardust in deep space, nebula background' },
-  { words: ['phoenix','fire','flame'], subject: 'a phoenix bursting into flame above an ancient temple at sunrise' },
-  { words: ['griffin'], subject: 'a majestic griffin soaring above snow capped mountains at dawn' },
-  { words: ['astronaut'], subject: 'an astronaut floating above Earth with the sun rising behind the planet' }
+/* ---------- LAYER 3: TIME / LIGHTING ---------- */
+const lightingPool = [
+  'during a vivid golden hour sunset',
+  'under a brilliant sunrise sky',
+  'beneath a starry midnight sky',
+  'illuminated by soft moonlight',
+  'lit by dramatic storm clouds',
+  'glowing under neon city lights',
+  'bathed in warm candlelight',
+  'under swirling aurora borealis light',
+  'wrapped in soft misty morning fog',
+  'lit by a single dramatic spotlight'
+];
+const lightingKeywords = {
+  night: 'beneath a starry midnight sky',
+  moon: 'illuminated by soft moonlight',
+  sunset: 'during a vivid golden hour sunset',
+  sunrise: 'under a brilliant sunrise sky',
+  storm: 'lit by dramatic storm clouds',
+  neon: 'glowing under neon city lights',
+  dark: 'wrapped in deep atmospheric shadow',
+  bright: 'lit by brilliant clear daylight',
+  dawn: 'under a brilliant sunrise sky',
+  aurora: 'under swirling aurora borealis light'
+};
+
+/* ---------- LAYER 4: ATMOSPHERE EFFECT ---------- */
+const atmospherePool = [
+  'with glowing fireflies drifting through the air',
+  'with gentle falling snow',
+  'with soft drifting fog',
+  'with scattered glowing embers',
+  'with delicate falling autumn leaves',
+  'with drifting cherry blossom petals',
+  'with faint rising steam',
+  'with sparkling floating dust particles',
+  'with light rain falling',
+  'with swirling wisps of magical energy'
+];
+const atmosphereKeywords = {
+  snow: 'with gentle falling snow',
+  fire: 'with scattered glowing embers',
+  rain: 'with light rain falling',
+  fog: 'with soft drifting fog',
+  magic: 'with swirling wisps of magical energy',
+  autumn: 'with delicate falling autumn leaves',
+  spring: 'with drifting cherry blossom petals',
+  spark: 'with sparkling floating dust particles'
+};
+
+/* ---------- LAYER 5: ART STYLE ---------- */
+const stylePool = [
+  'highly detailed digital painting',
+  'epic fantasy concept art',
+  'cinematic hyper realistic render',
+  'soft painterly illustration',
+  'dramatic matte painting',
+  'vibrant anime inspired illustration',
+  'intricate ink and watercolor style',
+  'polished 3D render',
+  'moody oil painting style',
+  'bold comic book illustration style'
+];
+const styleKeywords = {
+  anime: 'vibrant anime inspired illustration',
+  pixel: 'stylized retro pixel art rendering',
+  comic: 'bold comic book illustration style',
+  paint: 'soft painterly illustration',
+  retro: 'nostalgic retro poster art style',
+  '3d': 'polished 3D render',
+  ink: 'intricate ink and watercolor style'
+};
+
+/* ---------- LAYER 6: COLOR PALETTE ---------- */
+const palettePool = [
+  'rendered in vivid jewel tone colors',
+  'rendered in soft dreamy pastel colors',
+  'rendered in warm fiery orange and red tones',
+  'rendered in cool icy blue and teal tones',
+  'rendered in deep moody purple and violet tones',
+  'rendered in rich emerald and gold tones',
+  'rendered in high contrast black and gold tones',
+  'rendered in glowing neon pink and cyan tones'
+];
+const paletteKeywords = {
+  red: 'rendered in bold fiery red tones',
+  blue: 'rendered in cool icy blue tones',
+  green: 'rendered in rich emerald green tones',
+  purple: 'rendered in deep moody violet tones',
+  gold: 'rendered in luxurious gold and amber tones',
+  silver: 'rendered in cool metallic silver tones',
+  black: 'rendered in high contrast black and gold tones',
+  pink: 'rendered in glowing neon pink tones',
+  orange: 'rendered in warm fiery orange tones',
+  white: 'rendered in soft luminous white and silver tones'
+};
+
+/* ---------- LAYER 7: CAMERA / COMPOSITION ---------- */
+const compositionPool = [
+  'dramatic low angle shot',
+  'sweeping wide establishing shot',
+  'intimate close up composition',
+  'dynamic action pose composition',
+  'symmetrical centered composition',
+  'striking silhouette composition',
+  'bird\\'s eye aerial view composition',
+  'cinematic rule of thirds composition'
 ];
 
 createButton.addEventListener('click', () => generateImage(0));
@@ -197,13 +372,11 @@ async function generateImage(nextVariation) {
   spinner.style.display = 'flex';
   spinnerText.textContent = 'Creating your image... this can take up to 30 seconds.';
   preview.style.visibility = 'hidden';
+  promptPreviewEl.textContent = '';
 
   try {
-    const random = seededRandom(hashString(username + '|' + variation));
-    const subject = chooseSubject(username, random);
-    const style = styleModifiers[Math.floor(random() * styleModifiers.length)];
-    const seed = Math.floor(random() * 1000000);
-    const prompt = `${subject}, ${style}`;
+    const prompt = buildLayeredPrompt(username, variation);
+    const seed = Math.floor(seededRandom(hashString(username + '|seed|' + variation))() * 1000000);
     const imageUrl = buildImageUrl(prompt, seed);
 
     const imageBitmap = await fetchImageWithTimeout(imageUrl, REQUEST_TIMEOUT_MS);
@@ -223,6 +396,7 @@ async function generateImage(nextVariation) {
 
     const sizeKb = Math.round(blob.size / 1024);
     showStatus(`Your image is ready (${sizeKb} KB).`, 'success');
+    promptPreviewEl.textContent = 'Prompt used: ' + prompt;
   } catch (error) {
     console.error(error);
     handleGenerationError(error);
@@ -232,14 +406,66 @@ async function generateImage(nextVariation) {
   }
 }
 
-function chooseSubject(username, random) {
+function buildLayeredPrompt(username, variationNumber) {
   const name = username.toLowerCase();
-  for (const entry of keywordMap) {
-    if (entry.words.some((word) => name.includes(word))) {
-      return entry.subject;
+
+  const subject = pickLayer(name, subjectKeywords, Object.values(subjectKeywords),
+    hashString(username + '|subject|' + variationNumber));
+
+  const setting = pickLayer(name, settingKeywords, Object.values(settingKeywords),
+    hashString(username + '|setting|' + variationNumber));
+
+  const lighting = pickLayer(name, lightingKeywords, lightingPool,
+    hashString(username + '|lighting|' + variationNumber));
+
+  const atmosphere = pickLayer(name, atmosphereKeywords, atmospherePool,
+    hashString(username + '|atmosphere|' + variationNumber));
+
+  const style = pickLayer(name, styleKeywords, stylePool,
+    hashString(username + '|style|' + variationNumber));
+
+  const palette = pickLayer(name, paletteKeywords, palettePool,
+    hashString(username + '|palette|' + variationNumber));
+
+  const random = seededRandom(hashString(username + '|composition|' + variationNumber));
+  const composition = compositionPool[Math.floor(random() * compositionPool.length)];
+
+  const numberPhrase = buildNumberPhrase(username,
+    seededRandom(hashString(username + '|number|' + variationNumber)));
+
+  const parts = [subject, setting, lighting, atmosphere, numberPhrase, style, palette, composition]
+    .filter(Boolean);
+
+  let prompt = parts.join(', ');
+  if (prompt.length > 480) {
+    prompt = prompt.slice(0, 480);
+  }
+  return prompt;
+}
+
+function pickLayer(name, keywordMap, fallbackPool, seed) {
+  for (const word of Object.keys(keywordMap)) {
+    if (name.includes(word)) {
+      return keywordMap[word];
     }
   }
-  return subjectTemplates[Math.floor(random() * subjectTemplates.length)];
+  const random = seededRandom(seed);
+  return fallbackPool[Math.floor(random() * fallbackPool.length)];
+}
+
+function buildNumberPhrase(username, random) {
+  const match = username.match(/\d+/);
+  if (!match) return '';
+  const number = parseInt(match[0], 10);
+  if (!Number.isFinite(number) || number <= 0) return '';
+
+  const smallCount = Math.min(Math.max(number, 1), 12);
+  const decorativeElements = [
+    'glowing orbs', 'floating candles', 'small stars', 'tiny lanterns',
+    'glowing runes', 'sparkling embers', 'floating petals', 'glowing crystals'
+  ];
+  const element = decorativeElements[Math.floor(random() * decorativeElements.length)];
+  return `surrounded by exactly ${smallCount} ${element}`;
 }
 
 function buildImageUrl(prompt, seed) {
