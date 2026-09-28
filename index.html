@@ -24,7 +24,7 @@
 </main>
 <script>
 'use strict';
-const TARGET_BYTES=950*1024,MAX_DIMENSION=1920,STARTING_QUALITY=.92,MINIMUM_QUALITY=.45,QUALITY_STEP=.05,RESIZE_MULTIPLIER=.85,MINIMUM_DIMENSION=320,RETURN_DELAY_MS=2200;
+const TARGET_BYTES=950*1024,MAX_DIMENSION=1920,STARTING_QUALITY=.92,MINIMUM_QUALITY=.45,QUALITY_STEP=.05,RESIZE_MULTIPLIER=.85,MINIMUM_DIMENSION=320,RETURN_DELAY_MS=1800;
 const fileInput=document.getElementById('file-input'),chooseButton=document.getElementById('choose-button'),status=document.getElementById('status');
 let returnAttempted=false;
 
@@ -32,9 +32,15 @@ fileInput.addEventListener('change',async()=>{
   const file=fileInput.files[0]; if(!file)return;
   if(!file.type.startsWith('image/')){showStatus('Please choose an image file.','error');fileInput.value='';return;}
   chooseButton.classList.add('disabled'); showStatus('Preparing and downloading your image...','');
-  try{const blob=await compressImage(file);downloadBlob(blob,filenameWithoutExtension(file.name)+'-ready-to-post.jpg');showStatus('Your image is downloading. Returning to the previous forum page...','success');window.setTimeout(returnToPreviousPage,RETURN_DELAY_MS)}
-  catch(error){showStatus(error.message||'The image could not be prepared. Please try another image.','error');chooseButton.classList.remove('disabled')}
-  finally{fileInput.value=''}
+  try{
+    const blob=await compressImage(file);
+    downloadBlob(blob,filenameWithoutExtension(file.name)+'-ready-to-post.jpg');
+    showStatus('Your image is downloading. Returning to the previous page...','success');
+    window.setTimeout(returnToPreviousPage,RETURN_DELAY_MS);
+  }catch(error){
+    showStatus(error.message||'The image could not be prepared. Please try another image.','error');
+    chooseButton.classList.remove('disabled');
+  }finally{fileInput.value=''}
 });
 
 async function compressImage(file){
@@ -47,15 +53,27 @@ async function compressImage(file){
 function loadImage(file){return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('This image could not be opened by your browser. Please try another image.'))};image.src=url})}
 function createJpeg(image,width,height,quality){return new Promise((resolve,reject)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx){reject(new Error('Your browser could not prepare this image.'));return}ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Your browser could not create the image file.')),'image/jpeg',quality)})}
 function downloadBlob(blob,filename){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;link.style.display='none';document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),30000)}
-function returnToPreviousPage(){if(returnAttempted)return;returnAttempted=true;
-  // New-tab case: the forum tab is the opener and already remains on its exact page.
-  if(window.opener&&!window.opener.closed){try{window.opener.focus()}catch(_){}try{window.close()}catch(_){}window.setTimeout(showManualReturn,900);return}
-  // Same-tab case: use history only when this page was actually linked from another page.
-  if(document.referrer&&window.history.length>1){window.history.back();window.setTimeout(showManualReturn,1500);return}
-  // No trustworthy navigation target exists. Do not send the user to an arbitrary page.
-  showManualReturn();
+
+function returnToPreviousPage(){
+  if(returnAttempted)return;
+  returnAttempted=true;
+
+  if(window.history.length>1){
+    window.history.back();
+    window.setTimeout(showManualReturn,1400);
+    return;
+  }
+
+  try{ if(window.opener&&!window.opener.closed) window.opener.focus(); }catch(_){}
+  try{ window.close(); }catch(_){}
+
+  window.setTimeout(showManualReturn,800);
 }
-function showManualReturn(){showStatus('Your image was downloaded. Return to the forum tab and upload the saved image.','success');chooseButton.classList.remove('disabled')}
+
+function showManualReturn(){
+  showStatus('Your image was downloaded. Please return to the previous tab and upload the saved image.','success');
+  chooseButton.classList.remove('disabled');
+}
 function showStatus(message,type){status.textContent=message;status.className=type;status.style.display='block'}
 function filenameWithoutExtension(name){const i=name.lastIndexOf('.');return i>0?name.slice(0,i):name}
 </script>
